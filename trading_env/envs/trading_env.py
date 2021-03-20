@@ -8,14 +8,21 @@ import time
 from collections import deque 
 import gym 
 from gym import spaces
+import os 
+from sklearn.preprocessing import MinMaxScaler
 
 class TradingEnv(gym.Env): 
     metadata = {'render.modes':['human']}
-    def __init__(self, initial_balance = 9000, lookback_window = 30, episode_length = 300): 
+    def __init__(self, initial_balance = 8000, lookback_window = 30, episode_length = 300): 
 
         # ENV PARAMETERS
 
-        self.data = pd.read_csv('price.csv')
+        current_path = os.path.realpath(__file__).split('/')[:-1]
+        path = os.path.join(*current_path)
+        path = os.path.join('/', path, 'price.csv')
+
+
+        self.data = pd.read_csv(path)
         self.data = self.data.dropna().reset_index(drop = True)
         self.total_steps = self.data.shape[0]
         self.initial_balance = initial_balance
@@ -28,6 +35,7 @@ class TradingEnv(gym.Env):
 
         self.initialize_state()
 
+        self.current_episode = 0
 
         # VIZ PARAMETERS
 
@@ -41,10 +49,14 @@ class TradingEnv(gym.Env):
 
         # GYM PARAMETERS
         self.observation_space = spaces.Box(low = -10e5, high = 10e5, shape = self.get_state_size())
-        self.action_space = spaces.Discrete(3)
+        # self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(2)
 
     def get_state_size(self): 
         return self.reset().shape
+
+    def get_random_action(self): 
+        return self.action_space.sample()
 
     def init_render(self):
 
@@ -79,14 +91,15 @@ class TradingEnv(gym.Env):
         new_price_data = self.data.drop('Date', axis = 1).iloc[self.current_index,: ]
         current_price = np.random.uniform(new_price_data.Open, new_price_data.Close)
 
-        if action == 0: 
-            pass 
-        elif action == 1 and self.balance > 0: 
+        self.baseline_value = new_price_data[0] * self.initial_balance
+        # if action == 0: 
+        #     pass 
+        if action == 0 and self.balance > 0: 
             self.stock_bought = self.balance / current_price
             self.balance -= self.stock_bought * current_price
             self.stock_held += self.stock_bought
         
-        elif action == 2 and self.stock_held > 0: 
+        elif action == 1 and self.stock_held > 0: 
             self.stock_sold = self.stock_held
             self.balance += self.stock_held * current_price
             self.stock_held = 0 
@@ -97,7 +110,8 @@ class TradingEnv(gym.Env):
         self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_bought, self.stock_sold])
         self.market_history.append(list(new_price_data.values.flatten()))
 
-        reward = self.net_worth - self.prev_net_worth
+        reward = self.compute_reward()
+        
         self.episode_reward += reward
         if self.net_worth < 0.5 * self.initial_balance: 
             done = True
@@ -106,7 +120,21 @@ class TradingEnv(gym.Env):
             done = True 
     
 
-        return self.get_obs(), reward, done, None  
+        return self.get_obs(), reward, done, {} 
+
+    def compute_reward(self):
+        # return self.get_baseline_diff()
+        return self.net_worth - self.prev_net_worth
+        # reward = np.exp(0.001 * (self.net_worth - self.initial_balance)) -1
+        # reward = -np.exp(0.1 * (self.net_worth - 10000))
+
+        # reward = 0.
+        # if self.current_step == self.episode_length: 
+        #     reward = 0.1 * (self.net_worth - 1.5 * self.data.drop('Date', axis = 1).iloc[self.current_index,-2])
+        return reward 
+
+    def get_baseline_diff(self): 
+        return self.net_worth - self.baseline_value
 
     def get_obs(self): 
 
@@ -117,10 +145,12 @@ class TradingEnv(gym.Env):
         return state.flatten()
 
     def reset(self, manual_index = None): 
+
         self.current_index = manual_index + self.lookback_window + 1 if manual_index is not None else np.random.randint(self.lookback_window + 1, self.total_steps - (self.episode_length + 1))
         self.current_step = 0
         
         self.initialize_state()
+        self.baseline_value = self.balance
         
         # STATE IS BALANCE, NET WORTH, HELD, SOLD, BOUGHT 
         self.orders_history = np.zeros((self.lookback_window,5))
@@ -186,7 +216,7 @@ class TradingEnv(gym.Env):
 
             # self.screen.blit(alpha_screen,(0,0))            
             # WRITING LABELS
-            label = self.font.render('{:.0f}'.format(y_labels[i]), 50, (250,250,250))
+            label = self.font.render('{:.1f}'.format(y_labels[i]), 50, (250,250,250))
             self.screen.blit(label, np.array([x_label_pos, y_label_pos - 30]).astype(int))
             y_label_pos -= y_label_inc
 
@@ -198,7 +228,7 @@ class TradingEnv(gym.Env):
         
         x_pos_vol = [x_pos]
 
-        colors = [(220,0,0), (0,220,0), (0,0,220)]
+        colors = [(220,0,0), (0,220,0), (0,80,220)]
         color = colors[0]
         for i in range(data.shape[0]): 
 
@@ -260,24 +290,52 @@ class TradingEnv(gym.Env):
         pg.draw.line(self.screen, (0,0,0), np.array([0, self.render_size[1] *  self.graph_height_ratio - 5]).astype(int), np.array([self.render_size[0], self.render_size[1] * self.graph_height_ratio - 5]).astype(int), width = 6)
         pg.draw.polygon(self.screen, ((150,30,30)), volumes.astype(int), width = 0)
         
-        viz_data = "Steps:                       {}/{}\nNet_Worth:            {:.0f}\nP_Net_Worth:        {:.0f}\nEp_Reward:             {:.0f}\nReward:                   {:.0f}\nBalance:                 {:.0f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}".format(self.current_step,self.episode_length,self.net_worth, 
+        viz_data = "Steps:                       {}/{}\nBaseline diff:         {:.2f}\nNet_Worth:            {:.2f}\nP_Net_Worth:        {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}".format(self.current_step,
+                                                                                                                                       self.episode_length,
+                                                                                                                                       self.get_baseline_diff(), 
+                                                                                                                                       self.net_worth, 
                                                                                                                                        self.prev_net_worth, 
-                                                                                                                                        self.episode_reward, 
-                                                                                                                                       self.net_worth - self.prev_net_worth, 
+                                                                                                                                       self.episode_reward, 
+                                                                                                                                       self.compute_reward(), 
                                                                                                                                        self.balance,
                                                                                                                                        self.stock_held,
                                                                                                                                        self.stock_bought, 
                                                                                                                                        self.stock_sold)
         for i,vz in enumerate(viz_data.split('\n')): 
             label = self.font.render(vz, 50, (250,250,250))
-            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.6 + i * 0.05)]).astype(int))
+            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.5 + i * 0.05)]).astype(int))
 
 
 
         self.screen.blit(alpha_screen,(0,0))
+
+class NormalizedEnv(TradingEnv): 
+    def __init__(self): 
+        super().__init__() 
         
+        for col in ['Open', 'High', 'Low', 'Close']: 
+            self.data[col] = MinMaxScaler().fit_transform(self.data[col].values.reshape(-1,1))
+        self.initial_balance = 0.6
+        self.initialize_state()
 
+# SUBCLASS FOR A UNIQUE INITIALIZATION TO CHECK AGENT 
+class TradingEnvFix(TradingEnv): 
+    def __init__(self): 
+        super().__init__()
 
+    def reset(self, manual_index = 0): 
+        return super().reset(manual_index = manual_index)
+    
+    def initialize_state(self): 
+
+        self.balance = self.initial_balance
+        self.net_worth = self.balance
+        self.prev_net_worth = self.balance
+        self.stock_held = 0. 
+        self.stock_sold = 0. 
+        self.stock_bought = 0. 
+
+        self.episode_reward = 0.
 
 
 if __name__ == "__main__": 
@@ -293,6 +351,7 @@ if __name__ == "__main__":
         while not done: 
 
             ns, r, done, _ = env.step(np.random.randint(3))
+            print(ns.shape)
             ep_reward += r
             time.sleep(0.001)
             env.render()
