@@ -41,10 +41,12 @@ class TradingEnv(gym.Env):
 
         self.render_ready = False
         self.render_size = np.array([1000, 800])
-        self.render_window_ratio = 4
+        # self.render_window_samples = 4
+        self.render_window_samples = 120
         self.candle_start_height = 0.2
         self.nb_y_label = 4 
         self.graph_height_ratio = 0.8
+        self.draw_order_history = []
 
 
         # GYM PARAMETERS
@@ -142,6 +144,8 @@ class TradingEnv(gym.Env):
         market_history = np.array(self.market_history)
         state = np.hstack([market_history, agent_actions])
 
+        self.draw_order_history.append(self.net_worth)
+
         return state.flatten()
 
     def reset(self, manual_index = None): 
@@ -165,6 +169,8 @@ class TradingEnv(gym.Env):
 
         obs = self.get_obs()
 
+        self.draw_order_history = [self.balance]
+
         return obs 
     def render(self): 
 
@@ -181,10 +187,9 @@ class TradingEnv(gym.Env):
 
     def draw(self): 
 
-        data_idx = [np.clip(self.current_index - int(self.render_window_ratio * 0.5 * self.lookback_window), 0, self.data.shape[0]), 
-                    np.clip(self.current_index + int(self.render_window_ratio * 0.5 * self.lookback_window), 0, self.data.shape[0])]
-        # print(self.current_index, data_idx)
-        # input()
+        data_idx = [np.clip(self.current_index - int(self.render_window_samples * 0.5), 0, self.data.shape[0]), 
+                    np.clip(self.current_index + int(self.render_window_samples * 0.5), 0, self.data.shape[0])]
+
 
         if(data_idx[0] == data_idx[1]):
             return 
@@ -269,16 +274,29 @@ class TradingEnv(gym.Env):
         # DRAWING AGENT'S BALANCE
 
         center_pos_x = self.render_size[0] * 0.5 
-        for i in reversed(range(1, len(self.orders_history))):
+        # for i in reversed(range(1, len(self.orders_history))):
 
-            height_current = self.render_size[1] * (1. - self.candle_start_height) - (self.orders_history[i][1] - scaling_data.min()) * y_magn
-            height_previous = self.render_size[1] * (1. - self.candle_start_height) - (self.orders_history[i-1][1] - scaling_data.min()) * y_magn
+        #     height_current = self.render_size[1] * (1. - self.candle_start_height) - (self.orders_history[i][1] - scaling_data.min()) * y_magn
+        #     height_previous = self.render_size[1] * (1. - self.candle_start_height) - (self.orders_history[i-1][1] - scaling_data.min()) * y_magn
 
 
-            pg.draw.line(self.screen, colors[-1], 
-                         np.array([center_pos_x, height_current]).astype(int), 
-                         np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 3)
-            center_pos_x -= rect_width
+        #     pg.draw.line(self.screen, colors[-1], 
+        #                  np.array([center_pos_x, height_current]).astype(int), 
+        #                  np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 3)
+        #     center_pos_x -= rect_width
+        self.screen.blit(alpha_screen,(0,0))
+
+        if(len(self.draw_order_history) > 1): 
+            for i in reversed(range(1, len(self.draw_order_history))):
+
+                height_current = self.render_size[1] * (1. - self.candle_start_height) - (self.draw_order_history[i] - scaling_data.min()) * y_magn
+                height_previous = self.render_size[1] * (1. - self.candle_start_height) - (self.draw_order_history[i-1] - scaling_data.min()) * y_magn
+
+
+                pg.draw.line(self.screen, colors[-1], 
+                             np.array([center_pos_x, height_current]).astype(int), 
+                             np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 8)
+                center_pos_x -= rect_width
 
         
         # DRAWING VOLUME AS A POLYGON 
@@ -307,7 +325,6 @@ class TradingEnv(gym.Env):
 
 
 
-        self.screen.blit(alpha_screen,(0,0))
 
 class NormalizedEnv(TradingEnv): 
     def __init__(self): 
@@ -348,10 +365,10 @@ if __name__ == "__main__":
         s = env.reset()
         ep_reward = 0. 
         counter = 0
+        print('State size: {}'.format(s.shape))
         while not done: 
 
             ns, r, done, _ = env.step(np.random.randint(3))
-            print(ns.shape)
             ep_reward += r
             time.sleep(0.001)
             env.render()
