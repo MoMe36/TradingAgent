@@ -14,3 +14,13 @@ register(
     id='Trading-v2',
     entry_point='trading_env.envs:NormalizedEnv',
 )
+
+register(
+    id='Trading-v3',
+    entry_point='trading_env.envs:AugmentedEnv',
+)
+
+register(
+    id='Trading-v4',
+    entry_point='trading_env.envs:AppleEnv',
+)

@@ -11,24 +11,38 @@ from gym import spaces
 import os 
 from sklearn.preprocessing import MinMaxScaler
 
+np.set_printoptions(precision = 3)
+
 class TradingEnv(gym.Env): 
     metadata = {'render.modes':['human']}
-    def __init__(self, initial_balance = 8000, lookback_window = 30, episode_length = 300): 
 
-        # ENV PARAMETERS
+    def get_data(self): 
 
         current_path = os.path.realpath(__file__).split('/')[:-1]
         path = os.path.join(*current_path)
         path = os.path.join('/', path, 'price.csv')
 
-
         self.data = pd.read_csv(path)
         self.data = self.data.dropna().reset_index(drop = True)
+    
+    def get_env_name(self): 
+        return "bitcoin_init"
+
+    def get_lookback_window(self): 
+        return 30 
+    
+    def __init__(self, initial_balance = 8000, episode_length = 300): 
+
+        # ENV PARAMETERS
+
+        self.get_data() 
+
+
         self.total_steps = self.data.shape[0]
         self.initial_balance = initial_balance
-        self.lookback_window = lookback_window
+        self.lookback_window = self.get_lookback_window()
         self.episode_length = episode_length
-        self.current_index = lookback_window + 1 
+        self.current_index = self.lookback_window + 1 
         self.current_step = 0
         self.market_history = deque(maxlen = self.lookback_window)
         self.orders_history = deque(maxlen = self.lookback_window)
@@ -40,7 +54,7 @@ class TradingEnv(gym.Env):
         # VIZ PARAMETERS
 
         self.render_ready = False
-        self.render_size = np.array([1000, 800])
+        self.render_size = np.array([1200, 1000])
         # self.render_window_samples = 4
         self.render_window_samples = 120
         self.candle_start_height = 0.2
@@ -135,8 +149,12 @@ class TradingEnv(gym.Env):
         #     reward = 0.1 * (self.net_worth - 1.5 * self.data.drop('Date', axis = 1).iloc[self.current_index,-2])
         return reward 
 
+    def reward_name(self):
+        return "dNW"
+
     def get_baseline_diff(self): 
         return self.net_worth - self.baseline_value
+
 
     def get_obs(self): 
 
@@ -308,7 +326,7 @@ class TradingEnv(gym.Env):
         pg.draw.line(self.screen, (0,0,0), np.array([0, self.render_size[1] *  self.graph_height_ratio - 5]).astype(int), np.array([self.render_size[0], self.render_size[1] * self.graph_height_ratio - 5]).astype(int), width = 6)
         pg.draw.polygon(self.screen, ((150,30,30)), volumes.astype(int), width = 0)
         
-        viz_data = "Steps:                       {}/{}\nBaseline diff:         {:.2f}\nNet_Worth:            {:.2f}\nP_Net_Worth:        {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}".format(self.current_step,
+        viz_data = "     {}\nSteps:                       {}/{}\nBaseline diff:         {:.2f}\nNet_Worth:            {:.2f}\nP_Net_Worth:        {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}".format(self.get_env_name(), self.current_step,
                                                                                                                                        self.episode_length,
                                                                                                                                        self.get_baseline_diff(), 
                                                                                                                                        self.net_worth, 
@@ -321,22 +339,110 @@ class TradingEnv(gym.Env):
                                                                                                                                        self.stock_sold)
         for i,vz in enumerate(viz_data.split('\n')): 
             label = self.font.render(vz, 50, (250,250,250))
-            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.5 + i * 0.05)]).astype(int))
+            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.4 + i * 0.05)]).astype(int))
 
 
 
 
 class NormalizedEnv(TradingEnv): 
+
+    def get_env_name(self): 
+        return "bitcoin_normalized"
+
+    def get_lookback_window(self): 
+        return 10 
+
     def __init__(self): 
         super().__init__() 
         
         for col in ['Open', 'High', 'Low', 'Close']: 
             self.data[col] = MinMaxScaler().fit_transform(self.data[col].values.reshape(-1,1))
+        # self.data = self.data.drop('Volume', axis = 1)
         self.initial_balance = 0.6
         self.initialize_state()
 
+    def get_obs(self): 
+
+        agent_actions = np.array(self.orders_history)
+        market_history = np.array(self.market_history)
+
+        # REMOVING VOLUME
+        market_history = market_history[:,:-1]
+        state = np.hstack([market_history, agent_actions])
+
+        self.draw_order_history.append(self.net_worth)
+
+        return state.flatten()
+
+class AugmentedEnv(NormalizedEnv): 
+
+    def get_lookback_window(self): 
+        return 10 
+
+    def get_env_name(self): 
+        return "bitcoin_augmented"
+
+    def initialize_state(self): 
+        super().initialize_state()
+        self.winning_streak = 0 
+        self.losing_streak = 0.
+        self.mfa = 0. 
+        self.mfe = 0. 
+
+    def get_obs(self): 
+        obs = super().get_obs()
+
+        if(self.net_worth > self.prev_net_worth): 
+            self.winning_streak += 1 
+            self.losing_streak = 0 
+        else: 
+            self.winning_streak = 0 
+            self.losing_streak += 1
+
+        self.mfa = np.array(self.market_history).min() - np.array(self.market_history)[0,0]
+        self.mfe = np.array(self.market_history).max() - np.array(self.market_history)[0,0]
+
+        streaks = np.array([self.winning_streak, self.losing_streak]) * 0.1
+        mf = np.array([self.mfa, self.mfe])
+
+
+        # obs = np.hstack([obs, streaks, mf])
+        obs = np.hstack([obs, streaks])
+
+        return obs 
+
+
+
+class AppleEnv(TradingEnv):
+    def get_env_name(self): 
+        return "apple_normalized" 
+
+    def get_data(self): 
+        current_path = os.path.realpath(__file__).split('/')[:-1]
+        path = os.path.join(*current_path)
+        path = os.path.join('/', path, 'aapl.csv')
+
+        self.data = pd.read_csv(path)
+        self.data = self.data.dropna().reset_index(drop = True)
+    def __init__(self, initial_balance = 30.): 
+        super().__init__(lookback_window = 10)
+
+        scalers = []
+        for col in ['Open', 'High', 'Low', 'Close']: 
+            scaler = MinMaxScaler()
+            self.data[col] = scaler.fit_transform(self.data[col].values.reshape(-1,1))
+            scalers.append(scaler)
+
+        self.initial_balance = scalers[0].transform([[initial_balance]])[0,0]
+        self.initialize_state()
+
+
+
+
 # SUBCLASS FOR A UNIQUE INITIALIZATION TO CHECK AGENT 
 class TradingEnvFix(TradingEnv): 
+    def get_env_name(self): 
+        return "bitcoin_fixed"
     def __init__(self): 
         super().__init__()
 
@@ -357,7 +463,9 @@ class TradingEnvFix(TradingEnv):
 
 if __name__ == "__main__": 
 
-    env = TradingEnv()
+    # env = TradingEnv()
+    # env = AppleEnv()
+    env = AugmentedEnv()
     
     rewards = []
     for ep in range(10): 
@@ -365,7 +473,7 @@ if __name__ == "__main__":
         s = env.reset()
         ep_reward = 0. 
         counter = 0
-        print('State size: {}'.format(s.shape))
+        print('State size: {} - Balance {}'.format(s.shape[0], env.balance))
         while not done: 
 
             ns, r, done, _ = env.step(np.random.randint(3))

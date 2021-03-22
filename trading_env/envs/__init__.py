@@ -1,1 +1,1 @@
-from trading_env.envs.trading_env import TradingEnv, TradingEnvFix, NormalizedEnv
+from trading_env.envs.trading_env import TradingEnv, TradingEnvFix, NormalizedEnv, AugmentedEnv, AppleEnv
