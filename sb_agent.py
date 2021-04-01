@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
     eval_eps = 100
     pbar = tqdm(total = eval_eps)
-    env = gym.make('Trading-v2')
+    env = gym.make('Trading-v0')
     rewards = []
     baseline_diff = []
     for ep in range(eval_eps): 

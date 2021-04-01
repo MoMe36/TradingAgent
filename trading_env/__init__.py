@@ -5,35 +5,35 @@ register(
     entry_point='trading_env.envs:TradingEnv',
 )
 
-register(
-    id='Trading-v1',
-    entry_point='trading_env.envs:TradingEnvFix',
-)
+# register(
+#     id='Trading-v1',
+#     entry_point='trading_env.envs:TradingEnvFix',
+# )
 
-register(
-    id='Trading-v2',
-    entry_point='trading_env.envs:NormalizedEnv',
-)
-<<<<<<< HEAD
+# register(
+#     id='Trading-v2',
+#     entry_point='trading_env.envs:NormalizedEnv',
+# )
+# <<<<<<< HEAD
 
-register(
-    id='Trading-v3',
-    entry_point='trading_env.envs:AugmentedEnv',
-)
+# register(
+#     id='Trading-v3',
+#     entry_point='trading_env.envs:AugmentedEnv',
+# )
 
-register(
-    id='Trading-v4',
-    entry_point='trading_env.envs:AppleEnv',
-)
-<<<<<<< HEAD
+# register(
+#     id='Trading-v4',
+#     entry_point='trading_env.envs:AppleEnv',
+# )
+# <<<<<<< HEAD
 
-register(
-    id='Trading-v5',
-    entry_point='trading_env.envs:McDonaldEnv',
-)
+# register(
+#     id='Trading-v5',
+#     entry_point='trading_env.envs:McDonaldEnv',
+# )
 
 
-=======
->>>>>>> parent of b420023... commit before refactoring archi
-=======
->>>>>>> parent of 69367ab... Stupid reset
+# =======
+# >>>>>>> parent of b420023... commit before refactoring archi
+# =======
+# >>>>>>> parent of 69367ab... Stupid reset
