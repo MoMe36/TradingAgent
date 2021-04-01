@@ -3,4 +3,3 @@ runs/*
 trained_models/*
 *.csv
 *.zip
-old_runs/* 

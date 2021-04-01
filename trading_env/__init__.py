@@ -7,12 +7,12 @@ register(
 
 register(
     id='Trading-v1',
-    entry_point='trading_env.envs:TradingCARG',
+    entry_point='trading_env.envs:TradingEnvFix',
 )
 
 register(
     id='Trading-v2',
-    entry_point='trading_env.envs:TradingAction',
+    entry_point='trading_env.envs:NormalizedEnv',
 )
 <<<<<<< HEAD
 
@@ -25,6 +25,7 @@ register(
     id='Trading-v4',
     entry_point='trading_env.envs:AppleEnv',
 )
+<<<<<<< HEAD
 
 register(
     id='Trading-v5',
@@ -34,3 +35,5 @@ register(
 
 =======
 >>>>>>> parent of b420023... commit before refactoring archi
+=======
+>>>>>>> parent of 69367ab... Stupid reset
