@@ -49,7 +49,9 @@ class TradingEnv(gym.Env):
         self.ep_timesteps = ep_timesteps
 
         self.price_scaler, self.volume_scaler = get_scaler(self.data)
-
+        self.reward_scaler = MinMaxScaler()
+        self.reward_scaler.fit(self.data[['High', 'Low']].values.flatten().reshape(-1,1))
+        
         self.market_history = deque(maxlen = lookback_window)
         self.orders_history = deque(maxlen = lookback_window) 
 
@@ -118,7 +120,7 @@ class TradingEnv(gym.Env):
         return self.get_obs(), reward, done, {}
 
     def compute_reward(self): 
-        return self.price_scaler.transform([[self.net_worth - self.prev_net_worth]])[0,0]
+        return self.reward_scaler.transform([[self.net_worth]])[0,0] - self.reward_scaler.transform([[self.prev_net_worth]])[0,0]
 
     def get_obs(self): 
 
