@@ -7,12 +7,12 @@ register(
 
 register(
     id='Trading-v1',
-    entry_point='trading_env.envs:TradingEnvFix',
+    entry_point='trading_env.envs:TradingCARG',
 )
 
 register(
     id='Trading-v2',
-    entry_point='trading_env.envs:NormalizedEnv',
+    entry_point='trading_env.envs:TradingAction',
 )
 
 register(
@@ -24,3 +24,10 @@ register(
     id='Trading-v4',
     entry_point='trading_env.envs:AppleEnv',
 )
+
+register(
+    id='Trading-v5',
+    entry_point='trading_env.envs:McDonaldEnv',
+)
+
+
