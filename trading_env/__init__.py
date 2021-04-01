@@ -14,6 +14,7 @@ register(
     id='Trading-v2',
     entry_point='trading_env.envs:TradingAction',
 )
+<<<<<<< HEAD
 
 register(
     id='Trading-v3',
@@ -31,3 +32,5 @@ register(
 )
 
 
+=======
+>>>>>>> parent of b420023... commit before refactoring archi

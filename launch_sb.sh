@@ -1,6 +1,7 @@
 #!bin/bash
 
 
+<<<<<<< HEAD
 # ==================== OBSERVATIONS ====================
 
 # IF INITIAL BALANCE IS TOO LOW: AGENT BUYS STOCK AND WAITS
@@ -32,3 +33,8 @@ python run_experiment.py --env=BC_I --layers="512,512" --train_steps=20
 # python run_eval.py --deterministic --agent_id=3 --env_id=MCD
 # python run_eval.py --agent_id=4 --env_id=MCD
 # python run_eval.py --agent_id=4 --env_id=MCD --do_plot
+=======
+python sb_agent.py --d
+python sb_agent.py
+python sb_agent.py --rand 
+>>>>>>> parent of b420023... commit before refactoring archi

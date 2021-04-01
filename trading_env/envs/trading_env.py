@@ -11,13 +11,18 @@ from gym import spaces
 import os 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
+<<<<<<< HEAD
 np.set_printoptions(precision = 3)
 get_extreme_prices = lambda x : x[['High', 'Low']].values.flatten().reshape(-1,1)
 get_volumes = lambda x : x[['Volume']].values.flatten().reshape(-1,1)
 
+=======
+>>>>>>> parent of b420023... commit before refactoring archi
 class TradingEnv(gym.Env): 
     metadata = {'render.modes':['human']}
+    def __init__(self, initial_balance = 8000, lookback_window = 30, episode_length = 300): 
 
+<<<<<<< HEAD
     def get_data_path(self): 
         return 'price.csv'
 
@@ -32,12 +37,17 @@ class TradingEnv(gym.Env):
         return self.data.Open[self.current_index] * np.random.uniform(0.8,1.3)
 
     def get_data(self): 
+=======
+        # ENV PARAMETERS
+>>>>>>> parent of b420023... commit before refactoring archi
 
         current_path = os.path.realpath(__file__).split('/')[:-1]
         path = os.path.join(*current_path)
         path = os.path.join('/', path, self.get_data_path())
 
+
         self.data = pd.read_csv(path)
+<<<<<<< HEAD
         self.data = self.data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']].dropna().reset_index(drop = True)
     
     def get_env_name(self): 
@@ -86,6 +96,14 @@ class TradingEnv(gym.Env):
         self.episode_length = self.get_episode_length()
         # self.initial_balance = self.get_initial_balance()
         self.current_index = self.lookback_window + 1 
+=======
+        self.data = self.data.dropna().reset_index(drop = True)
+        self.total_steps = self.data.shape[0]
+        self.initial_balance = initial_balance
+        self.lookback_window = lookback_window
+        self.episode_length = episode_length
+        self.current_index = lookback_window + 1 
+>>>>>>> parent of b420023... commit before refactoring archi
         self.current_step = 0
         self.market_history = deque(maxlen = self.lookback_window)
         self.orders_history = deque(maxlen = self.lookback_window)
@@ -97,7 +115,12 @@ class TradingEnv(gym.Env):
         # VIZ PARAMETERS
 
         self.render_ready = False
+<<<<<<< HEAD
         self.render_size = np.array([1200, 1000])
+=======
+        self.render_size = np.array([1000, 800])
+        # self.render_window_samples = 4
+>>>>>>> parent of b420023... commit before refactoring archi
         self.render_window_samples = 120
         self.candle_start_height = 0.2
         self.nb_y_label = 4 
@@ -195,12 +218,14 @@ class TradingEnv(gym.Env):
         #     reward = 0.1 * (self.net_worth - 1.5 * self.data.drop('Date', axis = 1).iloc[self.current_index,-2])
         return reward 
 
+<<<<<<< HEAD
     def get_reward_name(self):
         return "dNW"
 
+=======
+>>>>>>> parent of b420023... commit before refactoring archi
     def get_baseline_diff(self): 
         return self.net_worth - self.baseline_value
-
 
     def get_obs(self): 
 
@@ -396,7 +421,7 @@ class TradingEnv(gym.Env):
         
         self.draw_volumes(volumes, volume_magn, x_pos_vol, colors)
         
-        viz_data = "     {}\nSteps:                       {}/{}\nBaseline diff:         {:.2f}\nNet_Worth:            {:.2f}\nP_Net_Worth:        {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}".format(self.get_env_name(), self.current_step,
+        viz_data = "Steps:                       {}/{}\nBaseline diff:         {:.2f}\nNet_Worth:            {:.2f}\nP_Net_Worth:        {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}".format(self.current_step,
                                                                                                                                        self.episode_length,
                                                                                                                                        self.get_baseline_diff(), 
                                                                                                                                        self.net_worth, 
@@ -409,7 +434,7 @@ class TradingEnv(gym.Env):
                                                                                                                                        self.stock_sold)
         for i,vz in enumerate(viz_data.split('\n')): 
             label = self.font.render(vz, 50, (250,250,250))
-            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.4 + i * 0.05)]).astype(int))
+            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.5 + i * 0.05)]).astype(int))
 
 
 class TradingCARG(TradingEnv): 
@@ -463,6 +488,7 @@ class McDonaldEnv(TradingEnv):
 
 
 class NormalizedEnv(TradingEnv): 
+<<<<<<< HEAD
 
     def get_env_name(self): 
         return "BC_N"
@@ -474,15 +500,17 @@ class NormalizedEnv(TradingEnv):
     def get_lookback_window(self): 
         return 10 
 
+=======
+>>>>>>> parent of b420023... commit before refactoring archi
     def __init__(self): 
         super().__init__() 
         
         for col in ['Open', 'High', 'Low', 'Close']: 
             self.data[col] = MinMaxScaler().fit_transform(self.data[col].values.reshape(-1,1))
-        # self.data = self.data.drop('Volume', axis = 1)
         self.initial_balance = 0.6
         self.initialize_state()
 
+<<<<<<< HEAD
     def get_obs(self): 
 
         agent_actions = np.array(self.orders_history)
@@ -571,6 +599,10 @@ class AppleEnv(TradingEnv):
 class TradingEnvFix(TradingEnv): 
     def get_env_name(self): 
         return "BC_F"
+=======
+# SUBCLASS FOR A UNIQUE INITIALIZATION TO CHECK AGENT 
+class TradingEnvFix(TradingEnv): 
+>>>>>>> parent of b420023... commit before refactoring archi
     def __init__(self): 
         super().__init__()
         self.randomize_initial_balance = False
@@ -581,10 +613,14 @@ class TradingEnvFix(TradingEnv):
 
 if __name__ == "__main__": 
 
+<<<<<<< HEAD
     # env = TradingEnv()
     # env = AppleEnv()
     # env = AugmentedEnv()
     env = McDonaldEnv()
+=======
+    env = TradingEnv()
+>>>>>>> parent of b420023... commit before refactoring archi
     
     rewards = []
     for ep in range(10): 
@@ -592,7 +628,7 @@ if __name__ == "__main__":
         s = env.reset()
         ep_reward = 0. 
         counter = 0
-        print('State size: {} - Balance {}'.format(s.shape[0], env.balance))
+        print('State size: {}'.format(s.shape))
         while not done: 
 
             ns, r, done, _ = env.step(np.random.randint(3))
