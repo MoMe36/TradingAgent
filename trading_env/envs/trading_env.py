@@ -79,11 +79,18 @@ class TradingEnv(gym.Env):
                 self.stock_bought = self.balance / current_price 
                 self.stock_held = self.stock_bought
                 self.balance = 0.
+            else: 
+                self.stock_bought = 0
+
+            self.stock_sold = 0.
         else: # SELL
             if self.stock_held > 0: 
                 self.stock_sold = self.stock_held
                 self.balance = self.stock_sold * current_price
                 self.stock_held = 0. 
+            else: 
+                self.stock_sold = 0. 
+            self.stock_bought = 0.
 
         self.prev_net_worth = self.net_worth
         self.net_worth = self.balance + self.stock_held * current_price
@@ -96,7 +103,7 @@ class TradingEnv(gym.Env):
         idx = self.current_index
 
 
-        self.orders_history.append([self.balance, self.net_worth, self.stock_held])
+        self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
         self.market_history.append([self.data.Open[idx], self.data.High[idx], self.data.Low[idx], self.data.Close[idx], self.data.Volume[idx]])
         
         done = False 
@@ -108,15 +115,15 @@ class TradingEnv(gym.Env):
         reward = self.compute_reward()
         self.ep_reward += reward
 
-        return self.get_obs(), reward, done, None
+        return self.get_obs(), reward, done, {}
 
     def compute_reward(self): 
-        return self.net_worth - self.prev_net_worth
+        return self.price_scaler.transform([[self.net_worth - self.prev_net_worth]])[0,0]
 
     def get_obs(self): 
 
         market = pd.DataFrame(np.array(self.market_history), columns = 'Open,High,Low,Close,Volume'.split(','))
-        orders = pd.DataFrame(np.array(self.orders_history), columns = 'Balance,NW,H'.split(','))
+        orders = pd.DataFrame(np.array(self.orders_history), columns = 'Balance,NW,H,S,B'.split(','))
         obs = pd.concat([market, orders], axis = 1)
         
         for col in 'Open,High,Low,Close,Balance,NW'.split(','): 
@@ -141,7 +148,7 @@ class TradingEnv(gym.Env):
         self.stock_sold = 0.
 
         for i in range(self.current_index - self.lookback_window + 1, self.current_index + 1): 
-            self.orders_history.append([self.balance, self.net_worth, self.stock_held])
+            self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
             self.market_history.append([self.data.Open[i], self.data.High[i], self.data.Low[i], self.data.Close[i], self.data.Volume[i]])
 
         return self.get_obs()

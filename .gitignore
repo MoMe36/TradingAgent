@@ -3,3 +3,4 @@ runs/*
 trained_models/*
 *.csv
 *.zip
+draft_runs/

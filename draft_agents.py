@@ -28,9 +28,7 @@ if __name__ == '__main__':
         model.load('draft_runs/draft_agents/agent_pth')
     else: 
         model.learn(total_timesteps = 20e5, 
-                    tb_log_name = args.name, 
-                    callback = CheckpointCallback(save_freq = 10000, save_path = "./trained_models", 
-                                                  name_prefix = args.name))
+                    tb_log_name = 'draft_agent_0')
         model.save('draft_runs/draft_agents/agent_sb'.format('dqn' if args.dqn else 'ppo'))
 
     eval_ep = 10
@@ -43,4 +41,3 @@ if __name__ == '__main__':
             ns, r, done, info = env.step(action)
             env.render()
             s = ns 
-        
