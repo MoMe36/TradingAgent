@@ -41,8 +41,8 @@ class TradingEnv(gym.Env):
 
 
     def __init__(self, filename = 'price.csv', 
-                       lookback_window = 2, 
-                       ep_timesteps = 200): 
+                       lookback_window = 3, 
+                       ep_timesteps = 150): 
         super().__init__()
         self.data = get_data(filename)
         self.lookback_window = lookback_window
@@ -74,13 +74,18 @@ class TradingEnv(gym.Env):
 
     def step(self, action): 
 
+
         current_price = np.random.uniform(self.data.Low[self.current_index], self.data.High[self.current_index])
+        if self.current_ts == 0 :
+            self.baseline_hold = self.balance / current_price
+        self.baseline_value = self.baseline_hold * current_price 
         
         if action == 0: # BUY
             if self.balance > 0.: 
                 self.stock_bought = self.balance / current_price 
                 self.stock_held = self.stock_bought
                 self.balance = 0.
+                self.nb_ep_orders += 1
             else: 
                 self.stock_bought = 0
 
@@ -90,6 +95,7 @@ class TradingEnv(gym.Env):
                 self.stock_sold = self.stock_held
                 self.balance = self.stock_sold * current_price
                 self.stock_held = 0. 
+                self.nb_ep_orders += 1
             else: 
                 self.stock_sold = 0. 
             self.stock_bought = 0.
@@ -120,8 +126,14 @@ class TradingEnv(gym.Env):
         return self.get_obs(), reward, done, {}
 
     def compute_reward(self): 
-        return self.reward_scaler.transform([[self.net_worth]])[0,0] - self.reward_scaler.transform([[self.prev_net_worth]])[0,0]
-
+        # r = self.net_worth - 0.5 * (self.data.High[self.current_index] + self.data.Low[self.current_index])
+        # if r < 0: 
+        #     return r * 0.001
+        # else: 
+        #     return 0.01 * r
+        # return self.reward_scaler.transform([[self.net_worth]])[0,0] - self.reward_scaler.transform([[self.baseline_value]])[0,0]
+        return (self.reward_scaler.transform([[self.net_worth]])[0,0] - self.reward_scaler.transform([[self.prev_net_worth]])[0,0]) * 10.
+        # return self.reward_scaler.transform([[self.net_worth - self.prev_net_worth]])[0,0]
     def get_obs(self): 
 
         market = pd.DataFrame(np.array(self.market_history), columns = 'Open,High,Low,Close,Volume'.split(','))
@@ -135,10 +147,11 @@ class TradingEnv(gym.Env):
 
     def reset(self): 
 
-        self.current_index = np.random.randint(self.lookback_window + 1, self.data.shape[0] - (self.ep_timesteps + 1))
+        self.current_index = 20#np.random.randint(self.lookback_window + 1, self.data.shape[0] - (self.ep_timesteps + 1))
         self.current_ts = 0 
         self.draw_order_history = []
         self.ep_reward = 0.
+        self.nb_ep_orders = 0 
         
         # print(self.current_index)
         self.initial_balance = self.data.Open[self.current_index] * np.random.uniform(0.8,1.2)
@@ -148,6 +161,9 @@ class TradingEnv(gym.Env):
         self.stock_held = 0. 
         self.stock_bought = 0. 
         self.stock_sold = 0.
+
+        self.baseline_value = 0. 
+        self.baseline_hold = 0. 
 
         for i in range(self.current_index - self.lookback_window + 1, self.current_index + 1): 
             self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
@@ -261,19 +277,21 @@ class TradingEnv(gym.Env):
         pg.draw.line(self.screen, (0,0,0), np.array([0, self.render_size[1] *  self.graph_height_ratio - 5]).astype(int), np.array([self.render_size[0], self.render_size[1] * self.graph_height_ratio - 5]).astype(int), width = 6)
         pg.draw.polygon(self.screen, ((150,30,30)), volumes.astype(int), width = 0)
     def draw_infos(self): 
-        viz_data = "Steps:                       {}/{}\nNet_Worth:            {:.2f}\nP_Net_Worth:        {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}".format(self.current_ts,
+        viz_data = "Steps:                       {}/{}\nNet_Worth:            {:.2f}\nBaseline:                 {:.2f}\nBaselineDelta:            {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}\nOrders:                     {}".format(self.current_ts,
                                                                                                                                        self.ep_timesteps,
                                                                                                                                        self.net_worth, 
-                                                                                                                                       self.prev_net_worth, 
+                                                                                                                                       self.baseline_value,
+                                                                                                                                       self.net_worth - self.baseline_value,  
                                                                                                                                        self.ep_reward,
                                                                                                                                        self.compute_reward(), 
                                                                                                                                        self.balance,
                                                                                                                                        self.stock_held,
                                                                                                                                        self.stock_bought, 
-                                                                                                                                       self.stock_sold)
+                                                                                                                                       self.stock_sold, 
+                                                                                                                                       self.nb_ep_orders)
         for i,vz in enumerate(viz_data.split('\n')): 
             label = self.font.render(vz, 50, (250,250,250))
-            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.5 + i * 0.05)]).astype(int))
+            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.45 + i * 0.05)]).astype(int))
 
     def draw(self): 
         colors = [(220,0,0), (0,220,0), (0,80,220)]
