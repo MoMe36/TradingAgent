@@ -42,7 +42,7 @@ if __name__ == '__main__':
         print('Loading')
         model = PPO.load('draft_runs/draft_agents/agent_sb')
     else: 
-        model.learn(total_timesteps = 10e5, 
+        model.learn(total_timesteps = 50e4, 
                     tb_log_name = 'draft_agent_0')
         model.save('draft_runs/draft_agents/agent_sb')
 

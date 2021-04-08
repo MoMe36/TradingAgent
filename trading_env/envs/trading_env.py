@@ -45,6 +45,11 @@ class TradingEnv(gym.Env):
                        lookback_window = 3, 
                        ep_timesteps = 150): 
         super().__init__()
+
+
+        self.show_random_trader = True
+
+
         self.data = get_data(filename)
         self.lookback_window = lookback_window
         self.ep_timesteps = ep_timesteps
@@ -110,6 +115,37 @@ class TradingEnv(gym.Env):
 
         self.draw_order_history.append(self.net_worth)
 
+
+        # ============================================================================
+        # ============================================================================
+        # ============================================================================
+        #                   RANDOM TRADER ACTION 
+        random_trader_action = self.action_space.sample()
+        if random_trader_action == 0: # BUY
+            if self.random_trader_balance > 0.: 
+                self.random_trader_stock_bought = self.random_trader_balance / current_price 
+                self.random_trader_stock_held = self.random_trader_stock_bought
+                self.random_trader_balance = 0.
+            else: 
+                self.random_trader_stock_bought = 0
+
+            self.random_trader_stock_sold = 0.
+        else: # SELL
+            if self.random_trader_stock_held > 0: 
+                self.random_trader_stock_sold = self.random_trader_stock_held
+                self.random_trader_balance = self.random_trader_stock_sold * current_price
+                self.random_trader_stock_held = 0. 
+            else: 
+                self.random_trader_stock_sold = 0. 
+            self.random_trader_stock_bought = 0.
+
+        self.random_trader_net_worth = self.random_trader_balance + self.random_trader_stock_held * current_price
+        self.random_trader_draw_order_history.append(self.random_trader_net_worth)
+
+        # ============================================================================
+        # ============================================================================
+        # ============================================================================
+
         self.current_index += 1 
         self.current_ts += 1
 
@@ -169,6 +205,13 @@ class TradingEnv(gym.Env):
 
         self.baseline_value = 0. 
         self.baseline_hold = 0. 
+
+        self.random_trader_balance = self.balance
+        self.random_trader_net_worth = self.balance
+        self.random_trader_stock_held = 0.
+        self.random_trader_stock_sold = 0.
+        self.random_trader_stock_bought = 0.
+        self.random_trader_draw_order_history = []
 
         for i in range(self.current_index - self.lookback_window + 1, self.current_index + 1): 
             self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
@@ -271,6 +314,15 @@ class TradingEnv(gym.Env):
                 pg.draw.line(self.screen, colors[-1], 
                              np.array([center_pos_x, height_current]).astype(int), 
                              np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 8)
+
+                if self.show_random_trader: 
+                    random_trader_height_current = self.render_size[1] * (1. - self.candle_start_height) - (self.random_trader_draw_order_history[i] - scaling_data.min()) * y_magn
+                    random_trader_height_previous = self.render_size[1] * (1. - self.candle_start_height) - (self.random_trader_draw_order_history[i-1] - scaling_data.min()) * y_magn
+                    pg.draw.line(self.screen, colors[0], 
+                             np.array([center_pos_x, random_trader_height_current]).astype(int), 
+                             np.array([center_pos_x - rect_width, random_trader_height_previous]).astype(int), width = 1)
+
+
                 center_pos_x -= rect_width
     
     def draw_volumes(self, alpha_screen, volumes, volume_magn, x_pos_vol): 
@@ -309,7 +361,7 @@ class TradingEnv(gym.Env):
 
         data = self.data.drop(['Date', 'Volume'] ,axis = 1).values[data_idx[0]:data_idx[1], :]
         agent_hist = np.array(self.orders_history)[:,1]
-        scaling_data = np.hstack([data.flatten(), agent_hist.flatten()])
+        scaling_data = np.hstack([data.flatten()*1.2, data.flatten()*0.8])
         
         y_magn = (self.render_size[1] * self.graph_height_ratio) / (scaling_data.max() - scaling_data.min())
         
@@ -331,8 +383,7 @@ class TradingEnv_State(TradingEnv):
                         lookback_window = 3, 
                         ep_timesteps = 150): 
 
-        # super().__init__()
-
+        self.show_random_trader = True
         self.data = get_data(filename)
         self.lookback_window = lookback_window
         self.ep_timesteps = ep_timesteps 
@@ -349,7 +400,7 @@ class TradingEnv_State(TradingEnv):
 
     def reset(self): 
 
-        self.current_index = np.random.randint(self.lookback_window + 1, self.data.shape[0] - (self.ep_timesteps + 1))
+        self.current_index = np.random.randint(self.lookback_window + 3, self.data.shape[0] - (self.ep_timesteps + 1))
         self.current_ts = 0 
         self.draw_order_history = []
         self.ep_reward = 0.
@@ -372,7 +423,14 @@ class TradingEnv_State(TradingEnv):
         self.stock_sold = 0.
 
         self.baseline_value = 0. 
-        self.baseline_hold = 0. 
+        self.baseline_hold = 0.
+
+        self.random_trader_balance = self.balance
+        self.random_trader_net_worth = self.balance
+        self.random_trader_stock_held = 0.
+        self.random_trader_stock_sold = 0.
+        self.random_trader_stock_bought = 0.
+        self.random_trader_draw_order_history = [] 
 
         for i in range(self.current_index - self.lookback_window + 1, self.current_index + 1): 
             self.orders_history.append([self.balance / sma, self.net_worth / sma, 1 if self.stock_held > 0 else 0 , 1 if self.stock_sold > 0 else 0 , 1 if self.stock_bought > 0 else 0])
@@ -424,6 +482,37 @@ class TradingEnv_State(TradingEnv):
 
         self.draw_order_history.append(self.net_worth)
 
+        # ============================================================================
+        # ============================================================================
+        # ============================================================================
+        #                   RANDOM TRADER ACTION 
+
+        random_trader_action = self.action_space.sample()
+        if random_trader_action == 0: # BUY
+            if self.random_trader_balance > 0.: 
+                self.random_trader_stock_bought = self.random_trader_balance / current_price 
+                self.random_trader_stock_held = self.random_trader_stock_bought
+                self.random_trader_balance = 0.
+            else: 
+                self.random_trader_stock_bought = 0
+
+            self.random_trader_stock_sold = 0.
+        else: # SELL
+            if self.random_trader_stock_held > 0: 
+                self.random_trader_stock_sold = self.random_trader_stock_held
+                self.random_trader_balance = self.random_trader_stock_sold * current_price
+                self.random_trader_stock_held = 0. 
+            else: 
+                self.random_trader_stock_sold = 0. 
+            self.random_trader_stock_bought = 0.
+
+        self.random_trader_net_worth = self.random_trader_balance + self.random_trader_stock_held * current_price
+        self.random_trader_draw_order_history.append(self.random_trader_net_worth)
+
+        # ============================================================================
+        # ============================================================================
+        # ============================================================================
+
         self.current_index += 1 
         self.current_ts += 1
 
@@ -440,8 +529,14 @@ class TradingEnv_State(TradingEnv):
                                      (self.data.Volume[self.current_index] / vol_sma) - 1.])
 
 
-        # self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
-        # self.market_history.append([self.data.Open[idx], self.data.High[idx], self.data.Low[idx], self.data.Close[idx], self.data.Volume[idx]])
+
+
+
+
+
+
+
+
         
         done = False 
         if self.current_ts == self.ep_timesteps: 
