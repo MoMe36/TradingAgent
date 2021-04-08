@@ -5,6 +5,11 @@ register(
     entry_point='trading_env.envs:TradingEnv',
 )
 
+
+register(
+    id='Trading-v1',
+    entry_point='trading_env.envs:TradingEnv_State',
+)
 # register(
 #     id='Trading-v1',
 #     entry_point='trading_env.envs:TradingEnvFix',

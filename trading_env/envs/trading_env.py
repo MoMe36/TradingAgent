@@ -36,6 +36,7 @@ def get_scaler(data, min_max = True):
     return price_scaler, volume_scaler
 
 
+
 class TradingEnv(gym.Env): 
     metadata = {'render.modes':['human']}
 
@@ -60,8 +61,11 @@ class TradingEnv(gym.Env):
         self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Box(low = -10., high = 10., shape = self.get_obs().shape)
 
+        self.prepare_render()
 
         # VISUALIZATION 
+
+    def prepare_render(self): 
 
         self.render_ready = False
         self.render_size = np.array([1200, 1000])
@@ -71,6 +75,7 @@ class TradingEnv(gym.Env):
         self.nb_y_label = 4 
         self.graph_height_ratio = 0.8
         self.draw_order_history = []
+
 
     def step(self, action): 
 
@@ -321,10 +326,141 @@ class TradingEnv(gym.Env):
         
         
 
+class TradingEnv_State(TradingEnv): 
+    def __init__(self, filename = 'price.csv', 
+                        lookback_window = 3, 
+                        ep_timesteps = 150): 
+
+        # super().__init__()
+
+        self.data = get_data(filename)
+        self.lookback_window = lookback_window
+        self.ep_timesteps = ep_timesteps 
+
+
+        self.market_history = deque(maxlen = self.lookback_window)
+        self.orders_history = deque(maxlen = self.lookback_window)
+
+        self.reset()
+        self.action_space = spaces.Discrete(2)
+        self.observation_space = spaces.Box(low = -10., high = 10., shape = self.get_obs().shape)
+
+        self.prepare_render()
+
+    def reset(self): 
+
+        self.current_index = np.random.randint(self.lookback_window + 1, self.data.shape[0] - (self.ep_timesteps + 1))
+        self.current_ts = 0 
+        self.draw_order_history = []
+        self.ep_reward = 0.
+        self.nb_ep_orders = 0 
+        
+        # print(self.current_index)
+        sma = self.data.Close[self.current_index - self.lookback_window : self.current_index].mean()
+        vol_sma = self.data.Volume[self.current_index - self.lookback_window : self.current_index].mean()
+
+        # print(self.lookback_window)
+        # print(sma, vol_sma)
+        # print(self.data.Volume[self.current_index - self.lookback_window+1 : self.current_index +1])
+
+        self.initial_balance = self.data.Close[self.current_index] * np.random.uniform(0.8,1.2)
+        self.balance = self.initial_balance
+        self.net_worth = self.balance
+        self.prev_net_worth = self.net_worth
+        self.stock_held = 0. 
+        self.stock_bought = 0. 
+        self.stock_sold = 0.
+
+        self.baseline_value = 0. 
+        self.baseline_hold = 0. 
+
+        for i in range(self.current_index - self.lookback_window + 1, self.current_index + 1): 
+            self.orders_history.append([self.balance / sma, self.net_worth / sma, 1 if self.stock_held > 0 else 0 , 1 if self.stock_sold > 0 else 0 , 1 if self.stock_bought > 0 else 0])
+            self.market_history.append([(self.data.Close[i]/sma) - 1., 
+                                         self.data.Close[i]/self.data.Close[i-self.lookback_window] -1.,
+                                         (self.data.Close[i] - sma)/(self.data.Close[i - self.lookback_window: i].std() * 2.),
+                                         (self.data.Volume[i] / vol_sma) - 1.])
+
+        return self.get_obs()
+
+
+    def get_obs(self): 
+
+        orders = pd.DataFrame(np.array(self.orders_history), columns = 'balance,nw,Held,Sold,Bought'.upper().split(','))
+        market = pd.DataFrame(np.array(self.market_history), columns = 'close_n,mom,bb,vol_n'.upper().split(','))
+        state = pd.concat([market, orders], axis = 1)
+
+        return state.values.flatten()
+
+    def step(self, action): 
+
+        current_price = self.data.Close[self.current_index]#np.random.uniform(self.data.Low[self.current_index], self.data.High[self.current_index])
+        if self.current_ts == 0 :
+            self.baseline_hold = self.balance / current_price
+        self.baseline_value = self.baseline_hold * current_price 
+        
+        if action == 0: # BUY
+            if self.balance > 0.: 
+                self.stock_bought = self.balance / current_price 
+                self.stock_held = self.stock_bought
+                self.balance = 0.
+                self.nb_ep_orders += 1
+            else: 
+                self.stock_bought = 0
+
+            self.stock_sold = 0.
+        else: # SELL
+            if self.stock_held > 0: 
+                self.stock_sold = self.stock_held
+                self.balance = self.stock_sold * current_price
+                self.stock_held = 0. 
+                self.nb_ep_orders += 1
+            else: 
+                self.stock_sold = 0. 
+            self.stock_bought = 0.
+
+        self.prev_net_worth = self.net_worth
+        self.net_worth = self.balance + self.stock_held * current_price
+
+        self.draw_order_history.append(self.net_worth)
+
+        self.current_index += 1 
+        self.current_ts += 1
+
+        idx = self.current_index
+
+
+        sma = self.data.Close[self.current_index - self.lookback_window : self.current_index].mean()
+        vol_sma = self.data.Volume[self.current_index - self.lookback_window : self.current_index].mean()
+
+        self.orders_history.append([self.balance / sma, self.net_worth / sma, self.stock_held , self.stock_sold ,self.stock_bought])
+        self.market_history.append([(self.data.Close[self.current_index]/sma) - 1., 
+                                     self.data.Close[self.current_index]/self.data.Close[self.current_index-self.lookback_window] -1.,
+                                     (self.data.Close[self.current_index] - sma)/(self.data.Close[self.current_index - self.lookback_window: self.current_index].std() * 2.),
+                                     (self.data.Volume[self.current_index] / vol_sma) - 1.])
+
+
+        # self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
+        # self.market_history.append([self.data.Open[idx], self.data.High[idx], self.data.Low[idx], self.data.Close[idx], self.data.Volume[idx]])
+        
+        done = False 
+        if self.current_ts == self.ep_timesteps: 
+            done = True
+        if self.net_worth < 0.5 * self.initial_balance: 
+            done = True
+
+        reward = self.compute_reward()
+        self.ep_reward += reward
+
+        return self.get_obs(), reward, done, {}
+
+    def compute_reward(self): 
+
+        return (self.net_worth - self.prev_net_worth)*0.1
 
 
 if __name__ == '__main__': 
-    env = TradingEnv()
+    env = TradingEnv_State()
     s = env.reset()
 
     done = False
@@ -337,10 +473,11 @@ if __name__ == '__main__':
             action = env.action_space.sample()
 
             ns, r, done, info = env.step(action)
+            print(ns.shape)
             ep_reward += r
             env.render()
         ep_rewards.append(ep_reward)
-    print(np.mean(ep_rewards), np.std(ep_rewards))
+        print(np.mean(ep_rewards), np.std(ep_rewards))
 
 
 

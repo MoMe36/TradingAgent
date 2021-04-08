@@ -35,7 +35,7 @@ if __name__ == '__main__':
         os.mkdir('draft_runs/draft_agents')
         os.mkdir('draft_runs/draft_logs')
 
-    model = PPO('MlpPolicy', make_vec_env('Trading-v0', 8), 
+    model = PPO('MlpPolicy', make_vec_env('Trading-v1', 8), 
             verbose = 1, device = torch.device('cpu'), 
             tensorboard_log = './draft_runs/draft_logs')
     if args.enjoy: 
@@ -47,7 +47,7 @@ if __name__ == '__main__':
         model.save('draft_runs/draft_agents/agent_sb')
 
     eval_ep = 10
-    env = gym.make('Trading-v0')
+    env = gym.make('Trading-v1')
     for ep in range(eval_ep): 
         s = env.reset()
         done = False 
