@@ -361,7 +361,8 @@ class TradingEnv(gym.Env):
 
         data = self.data.drop(['Date', 'Volume'] ,axis = 1).values[data_idx[0]:data_idx[1], :]
         agent_hist = np.array(self.orders_history)[:,1]
-        scaling_data = np.hstack([data.flatten()*1.2, data.flatten()*0.8])
+        scaling_data = np.hstack([data.flatten()*1.2, data.flatten()*0.8, 
+                       np.array(self.draw_order_history).flatten() * 1.2, np.array(self.draw_order_history).flatten() * 0.8])
         
         y_magn = (self.render_size[1] * self.graph_height_ratio) / (scaling_data.max() - scaling_data.min())
         
@@ -432,13 +433,19 @@ class TradingEnv_State(TradingEnv):
         self.random_trader_stock_bought = 0.
         self.random_trader_draw_order_history = [] 
 
-        for i in range(self.current_index - self.lookback_window + 1, self.current_index + 1): 
+        # print('Starting idx: {}'.format(self.current_index))
+        # print('Data:\n{}'.format(self.data.iloc[self.current_index-(self.lookback_window + 1): self.current_index + self.lookback_window]))
+        self.debug_idx = deque(maxlen = self.lookback_window)
+
+        for i in range(self.current_index - self.lookback_window, self.current_index): 
             self.orders_history.append([self.balance / sma, self.net_worth / sma, 1 if self.stock_held > 0 else 0 , 1 if self.stock_sold > 0 else 0 , 1 if self.stock_bought > 0 else 0])
             self.market_history.append([(self.data.Close[i]/sma) - 1., 
                                          self.data.Close[i]/self.data.Close[i-self.lookback_window] -1.,
                                          (self.data.Close[i] - sma)/(self.data.Close[i - self.lookback_window: i].std() * 2.),
                                          (self.data.Volume[i] / vol_sma) - 1.])
-
+            self.debug_idx.append(i)
+        # print('Added idx: {}'.format(self.debug_idx))
+        # input()
         return self.get_obs()
 
 
@@ -452,7 +459,8 @@ class TradingEnv_State(TradingEnv):
 
     def step(self, action): 
 
-        current_price = self.data.Close[self.current_index]#np.random.uniform(self.data.Low[self.current_index], self.data.High[self.current_index])
+        current_price = self.data.Close[self.current_index+1]#np.random.uniform(self.data.Low[self.current_index], self.data.High[self.current_index])
+        # print('Current price: {} IDX: {}'.format(current_price, self.current_index + 1))
         if self.current_ts == 0 :
             self.baseline_hold = self.balance / current_price
         self.baseline_value = self.baseline_hold * current_price 
@@ -513,10 +521,6 @@ class TradingEnv_State(TradingEnv):
         # ============================================================================
         # ============================================================================
 
-        self.current_index += 1 
-        self.current_ts += 1
-
-        idx = self.current_index
 
 
         sma = self.data.Close[self.current_index - self.lookback_window : self.current_index].mean()
@@ -527,15 +531,13 @@ class TradingEnv_State(TradingEnv):
                                      self.data.Close[self.current_index]/self.data.Close[self.current_index-self.lookback_window] -1.,
                                      (self.data.Close[self.current_index] - sma)/(self.data.Close[self.current_index - self.lookback_window: self.current_index].std() * 2.),
                                      (self.data.Volume[self.current_index] / vol_sma) - 1.])
+        # self.debug_idx.append(self.current_index)
+        # print('Visible IDX: {}'.format(self.debug_idx))
+        # input()
+        self.current_index += 1 
+        self.current_ts += 1
 
-
-
-
-
-
-
-
-
+        idx = self.current_index
 
         
         done = False 
