@@ -65,6 +65,7 @@ if __name__ == '__main__':
     parser.add_argument('--agent_id', default = '0')
     parser.add_argument('--env_id', default = 'BC_N')
     parser.add_argument('--do_plot', action = 'store_true')
+    parser.add_argument('--ep_ts', default = '0')
     args = parser.parse_args()
 
 
@@ -79,6 +80,10 @@ if __name__ == '__main__':
     else: 
         env_nb = envs[args.env_id]
     env = gym.make('Trading-{}'.format(env_nb))
+    if int(args.ep_ts) != 0: 
+        env.ep_timesteps = int(args.ep_ts)
+
+    print(env.ep_timesteps)
 
 
     rewards = []

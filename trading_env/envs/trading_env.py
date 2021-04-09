@@ -68,10 +68,17 @@ class TradingEnv(gym.Env):
 
         self.prepare_render()
 
-        # VISUALIZATION 
+    def get_env_specs(self): 
+
+        specs = {'env_name':'Old'} 
+        return specs 
+
+    def get_random_action(self): 
+        return self.action_space.sample()
 
     def prepare_render(self): 
 
+        # VISUALIZATION 
         self.render_ready = False
         self.render_size = np.array([1200, 1000])
         self.render_window_samples = 4
@@ -392,6 +399,19 @@ class TradingEnv(gym.Env):
         
 
 class TradingEnv_State(TradingEnv): 
+
+    def get_env_specs(self): 
+
+        specs = {'env_name':'BC_S', 
+                'reward_strategy':'deltaNW', 
+                'lookback_window': self.lookback_window, 
+                'ep_timesteps': self.ep_timesteps, 
+                'state': 'b_n,nw_n,stocks,close_n,mom,bb,vol_n', 
+                'init_idx': 'random_idx', 
+                'init_b': '0.8-1.2_close'} 
+        return specs 
+
+
     def __init__(self, filename = 'price.csv', 
                         lookback_window = 3, 
                         ep_timesteps = 150): 
@@ -468,6 +488,9 @@ class TradingEnv_State(TradingEnv):
         state = pd.concat([market, orders], axis = 1)
 
         return state.values.flatten()
+
+    def get_baseline_diff(self): 
+        return self.net_worth - self.baseline_value 
 
     def step(self, action): 
 

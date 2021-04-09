@@ -43,6 +43,8 @@ def run_exp(exp_params):
     env_data['run_name'] = run_name
 
     env_folder = 'trained_models/{}'.format(env_data['env_name'])
+    if not os.path.exists('trained_models'):
+        os.mkdir('trained_models')
     if not os.path.exists(env_folder):
         os.mkdir(env_folder)
     if not os.path.exists('{}/{}'.format(env_folder, run_name)): 
