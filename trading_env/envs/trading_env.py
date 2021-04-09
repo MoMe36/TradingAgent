@@ -321,6 +321,18 @@ class TradingEnv(gym.Env):
                     pg.draw.line(self.screen, colors[0], 
                              np.array([center_pos_x, random_trader_height_current]).astype(int), 
                              np.array([center_pos_x - rect_width, random_trader_height_previous]).astype(int), width = 1)
+                    if i == len(self.draw_order_history) -1:
+
+                        line_col = [239, 192, 0] if height_current < random_trader_height_current else (0,0,0) 
+                        pg.draw.line(self.screen, line_col, 
+                                np.array([center_pos_x, random_trader_height_current]).astype(int), 
+                                np.array([center_pos_x, height_current]).astype(int))
+                        for h in [height_current, random_trader_height_current]: 
+                            pg.draw.line(self.screen, line_col, 
+                                np.array([center_pos_x - 5, h - 5]).astype(int), 
+                                np.array([center_pos_x + 5, h + 5]).astype(int))
+                        info = self.font.render('{:.1f}'.format(self.draw_order_history[-1] - self.random_trader_draw_order_history[-1]), 50, line_col)
+                        self.screen.blit(info, np.array([center_pos_x + 20, 0.5 * (height_current + random_trader_height_current)]).astype(int))
 
 
                 center_pos_x -= rect_width
@@ -362,7 +374,7 @@ class TradingEnv(gym.Env):
         data = self.data.drop(['Date', 'Volume'] ,axis = 1).values[data_idx[0]:data_idx[1], :]
         agent_hist = np.array(self.orders_history)[:,1]
         scaling_data = np.hstack([data.flatten()*1.2, data.flatten()*0.8, 
-                       np.array(self.draw_order_history).flatten() * 1.2, np.array(self.draw_order_history).flatten() * 0.8])
+                       np.array(self.draw_order_history).flatten() * 1.05, np.array(self.draw_order_history).flatten() * 0.95])
         
         y_magn = (self.render_size[1] * self.graph_height_ratio) / (scaling_data.max() - scaling_data.min())
         

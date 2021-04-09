@@ -44,7 +44,7 @@ if __name__ == "__main__":
                 verbose = 1, device = torch.device('cpu'), 
                 tensorboard_log = './runs/')
         
-        model.learn(total_timesteps = 10e6, 
+        model.learn(total_timesteps = 20e6, 
                     tb_log_name = args.name, 
                     callback = CheckpointCallback(save_freq = 10000, save_path = "./trained_models", 
                                                   name_prefix = args.name))
