@@ -36,10 +36,17 @@ def make_plot(filenames, info, folder_path):
         dfs[-1].columns = [fix_name(file, info)]
 
     dfs = pd.concat(dfs, axis = 1)
+    v_dfs = pd.DataFrame(None, columns = [info, 'name'])
+    for col in dfs.columns: 
+        n = np.empty((dfs.shape[0],1), dtype = 'object')
+        n[:,] = col
+        current_data = np.hstack([dfs[col].values.reshape(-1,1), n])
+        current_df = pd.DataFrame(current_data, columns = [info, 'name'])
+        v_dfs = pd.concat([v_dfs,current_df])
+    
     plt.figure(figsize = (24,16))
-    ax = sns.histplot(dfs, kde = False,
-                 multiple = "stack", 
-                 shrink = 0.8)
+    ax = sns.histplot(v_dfs, x = info, multiple = 'dodge', hue = 'name')
+
     plt.title(info.upper(), weight = 'bold', fontsize = 30)
     plt.ylabel('Count', weight = 'bold', fontsize = 20)
     
@@ -82,9 +89,6 @@ if __name__ == '__main__':
     env = gym.make('Trading-{}'.format(env_nb))
     if int(args.ep_ts) != 0: 
         env.ep_timesteps = int(args.ep_ts)
-
-    print(env.ep_timesteps)
-
 
     rewards = []
     baseline_diff = []
