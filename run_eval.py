@@ -49,6 +49,7 @@ def make_plot(filenames, info, folder_path):
 
     plt.title(info.upper(), weight = 'bold', fontsize = 30)
     plt.ylabel('Count', weight = 'bold', fontsize = 20)
+    plt.xlabel(info, weight = 'bold', fontsize = 20)
     
     # INCREASES LEGEND SIZE
     plt.setp(ax.get_legend().get_texts(), fontsize=22)

@@ -27,14 +27,14 @@ def run_exp(exp_params):
     tmp_env.reset()
     env_data = tmp_env.get_env_specs()
 
-    trained_agents = glob.glob('trained_models/{}/*'.format(env_data['env_name']))
+    trained_agents = glob.glob('trained_models/{}/*'.format(env_data['folder_name'] if 'folder_name' in env_data.keys() else env_data['env_name']))
     run_idx = len([agent for agent in trained_agents if 'agent' in agent]) 
 
     run_name = 'agent_{:03d}'.format(run_idx)
     
     model = PPO('MlpPolicy', make_vec_env(env_id, nb_threads), 
                 verbose = 1, device = torch.device('cpu'), 
-                tensorboard_log = './runs/{}/'.format(env_data['env_name']))
+                tensorboard_log = './runs/{}/'.format(env_data['folder_name'] if 'folder_name' in env_data.keys() else env_data['env_name']))
 
     model.learn(total_timesteps = train_steps, 
                 tb_log_name = run_name) 
@@ -42,7 +42,7 @@ def run_exp(exp_params):
     env_data = model.env.envs[0].get_env_specs()
     env_data['run_name'] = run_name
 
-    env_folder = 'trained_models/{}'.format(env_data['env_name'])
+    env_folder = 'trained_models/{}'.format(env_data['folder_name'] if 'folder_name' in env_data.keys() else env_data['env_name'])
     if not os.path.exists('trained_models'):
         os.mkdir('trained_models')
     if not os.path.exists(env_folder):
