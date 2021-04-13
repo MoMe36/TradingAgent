@@ -1,6 +1,6 @@
 #### https://pylessons.com/RL-BTC-BOT-backbone/
 
-import numpy as np 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt 
 import pygame as pg 
@@ -10,7 +10,7 @@ import gym
 from gym import spaces
 import os   
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
-
+import env_utils
 
 def get_data(filename):
 
@@ -35,6 +35,53 @@ def get_scaler(data, min_max = True):
 
     return price_scaler, volume_scaler
 
+class Trader: 
+    def __init__(self, initial_balance): 
+        self.reset(initial_balance)
+
+    def reset(self, initial_balance):
+        self.initial_balance = initial_balance
+        self.balance = initial_balance
+        self.net_worth = self.balance
+        self.prev_net_worth = self.balance 
+        self.stock_held = 0.
+        self.stock_bought = 0.
+        self.stock_sold = 0.
+
+        self.net_worth_history = [self.initial_balance]
+
+    def get_state(self): 
+        return [self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought]
+
+    def update(self, action, current_price): 
+        successful_order = 0
+
+        if action == 0: # BUY
+            if self.balance > 0.: 
+                self.stock_bought = self.balance / current_price 
+                self.stock_held = self.stock_bought
+                self.balance = 0.
+                successful_order = 1
+            else: 
+                self.stock_bought = 0
+
+            self.stock_sold = 0.
+        else: # SELL
+            if self.stock_held > 0: 
+                self.stock_sold = self.stock_held
+                self.balance = self.stock_sold * current_price
+                self.stock_held = 0. 
+                successful_order = 1
+            else: 
+                self.stock_sold = 0. 
+            self.stock_bought = 0.
+
+        self.prev_net_worth = self.net_worth
+        self.net_worth = self.balance + self.stock_held * current_price
+
+        self.net_worth_history.append(self.net_worth)
+
+        return self.get_state(), successful_order
 
 
 class TradingEnv(gym.Env): 
@@ -54,12 +101,23 @@ class TradingEnv(gym.Env):
         self.lookback_window = lookback_window
         self.ep_timesteps = ep_timesteps
 
-        self.price_scaler, self.volume_scaler = get_scaler(self.data)
-        self.reward_scaler = MinMaxScaler()
-        self.reward_scaler.fit(self.data[['High', 'Low']].values.flatten().reshape(-1,1))
+        self.initalize_env()
+
+    def set_data(self, data_path): 
+
+        print('Fetching {}'.format(data_path))
+        self.data = get_data(data_path)
+        self.initalize_env()
+
+    def set_lbw(self, lbw): 
+
+        self.lookback_window = lbw
+        self.initalize_env()
+
+    def initalize_env(self): 
         
-        self.market_history = deque(maxlen = lookback_window)
-        self.orders_history = deque(maxlen = lookback_window) 
+        self.market_history = deque(maxlen = self.lookback_window)
+        self.orders_history = deque(maxlen = self.lookback_window) 
 
         self.reset()
 
@@ -93,79 +151,24 @@ class TradingEnv(gym.Env):
 
 
         current_price = np.random.uniform(self.data.Low[self.current_index], self.data.High[self.current_index])
-        if self.current_ts == 0 :
-            self.baseline_hold = self.balance / current_price
-        self.baseline_value = self.baseline_hold * current_price 
         
-        if action == 0: # BUY
-            if self.balance > 0.: 
-                self.stock_bought = self.balance / current_price 
-                self.stock_held = self.stock_bought
-                self.balance = 0.
-                self.nb_ep_orders += 1
-            else: 
-                self.stock_bought = 0
-
-            self.stock_sold = 0.
-        else: # SELL
-            if self.stock_held > 0: 
-                self.stock_sold = self.stock_held
-                self.balance = self.stock_sold * current_price
-                self.stock_held = 0. 
-                self.nb_ep_orders += 1
-            else: 
-                self.stock_sold = 0. 
-            self.stock_bought = 0.
-
-        self.prev_net_worth = self.net_worth
-        self.net_worth = self.balance + self.stock_held * current_price
-
-        self.draw_order_history.append(self.net_worth)
+        self.baseline_trader.update(0, current_price) # Always buys (= hold)
+        self.trader.update(action,current_price)
+        self.random_trader.update(self.get_random_action(),current_price)
 
 
-        # ============================================================================
-        # ============================================================================
-        # ============================================================================
-        #                   RANDOM TRADER ACTION 
-        random_trader_action = self.action_space.sample()
-        if random_trader_action == 0: # BUY
-            if self.random_trader_balance > 0.: 
-                self.random_trader_stock_bought = self.random_trader_balance / current_price 
-                self.random_trader_stock_held = self.random_trader_stock_bought
-                self.random_trader_balance = 0.
-            else: 
-                self.random_trader_stock_bought = 0
-
-            self.random_trader_stock_sold = 0.
-        else: # SELL
-            if self.random_trader_stock_held > 0: 
-                self.random_trader_stock_sold = self.random_trader_stock_held
-                self.random_trader_balance = self.random_trader_stock_sold * current_price
-                self.random_trader_stock_held = 0. 
-            else: 
-                self.random_trader_stock_sold = 0. 
-            self.random_trader_stock_bought = 0.
-
-        self.random_trader_net_worth = self.random_trader_balance + self.random_trader_stock_held * current_price
-        self.random_trader_draw_order_history.append(self.random_trader_net_worth)
-
-        # ============================================================================
-        # ============================================================================
-        # ============================================================================
+        self.orders_history.append(self.construct_orders_state(self.current_index))
+        self.market_history.append(self.construct_market_state(self.current_index))
 
         self.current_index += 1 
         self.current_ts += 1
 
         idx = self.current_index
-
-
-        self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
-        self.market_history.append([self.data.Open[idx], self.data.High[idx], self.data.Low[idx], self.data.Close[idx], self.data.Volume[idx]])
         
         done = False 
         if self.current_ts == self.ep_timesteps: 
             done = True
-        if self.net_worth < 0.5 * self.initial_balance: 
+        if self.trader.net_worth < 0.5 * self.trader.initial_balance: 
             done = True
 
         reward = self.compute_reward()
@@ -174,57 +177,42 @@ class TradingEnv(gym.Env):
         return self.get_obs(), reward, done, {}
 
     def compute_reward(self): 
-        # r = self.net_worth - 0.5 * (self.data.High[self.current_index] + self.data.Low[self.current_index])
-        # if r < 0: 
-        #     return r * 0.001
-        # else: 
-        #     return 0.01 * r
-        # return self.reward_scaler.transform([[self.net_worth]])[0,0] - self.reward_scaler.transform([[self.baseline_value]])[0,0]
-        return (self.reward_scaler.transform([[self.net_worth]])[0,0] - self.reward_scaler.transform([[self.prev_net_worth]])[0,0]) * 10.
-        # return self.reward_scaler.transform([[self.net_worth - self.prev_net_worth]])[0,0]
-    def get_obs(self): 
+        return self.trader.net_worth - self.trader.prev_net_worth
+
+    def get_formatted_obs(self): 
 
         market = pd.DataFrame(np.array(self.market_history), columns = 'Open,High,Low,Close,Volume'.split(','))
         orders = pd.DataFrame(np.array(self.orders_history), columns = 'Balance,NW,H,S,B'.split(','))
         obs = pd.concat([market, orders], axis = 1)
+        return obs
+
+    def get_obs(self): 
         
-        for col in 'Open,High,Low,Close,Balance,NW'.split(','): 
-            obs[col] = self.price_scaler.transform(obs[col].values.reshape(-1,1))
-        obs['Volume'] = self.volume_scaler.transform(obs['Volume'].values.reshape(-1,1))
-        return obs.values.flatten() 
+        return self.get_formatted_obs().values.flatten() 
 
     def reset(self): 
 
-        self.current_index = 20#np.random.randint(self.lookback_window + 1, self.data.shape[0] - (self.ep_timesteps + 1))
+        self.current_index = np.random.randint(self.lookback_window + 2, self.data.shape[0] - (self.ep_timesteps + 1))
         self.current_ts = 0 
-        self.draw_order_history = []
         self.ep_reward = 0.
         self.nb_ep_orders = 0 
+
+        self.trader = Trader(self.data.Open[self.current_index] * np.random.uniform(0.8,1.2))
+        self.random_trader = Trader(self.trader.initial_balance)
+        self.baseline_trader = Trader(self.trader.initial_balance)
         
-        # print(self.current_index)
-        self.initial_balance = self.data.Open[self.current_index] * np.random.uniform(0.8,1.2)
-        self.balance = self.initial_balance
-        self.net_worth = self.balance
-        self.prev_net_worth = self.net_worth
-        self.stock_held = 0. 
-        self.stock_bought = 0. 
-        self.stock_sold = 0.
 
-        self.baseline_value = 0. 
-        self.baseline_hold = 0. 
-
-        self.random_trader_balance = self.balance
-        self.random_trader_net_worth = self.balance
-        self.random_trader_stock_held = 0.
-        self.random_trader_stock_sold = 0.
-        self.random_trader_stock_bought = 0.
-        self.random_trader_draw_order_history = []
-
-        for i in range(self.current_index - self.lookback_window + 1, self.current_index + 1): 
-            self.orders_history.append([self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought])
-            self.market_history.append([self.data.Open[i], self.data.High[i], self.data.Low[i], self.data.Close[i], self.data.Volume[i]])
-
+        for i in range(self.current_index - self.lookback_window, self.current_index): 
+            self.orders_history.append(self.construct_orders_state(i))
+            self.market_history.append(self.construct_market_state(i))
         return self.get_obs()
+
+    def construct_orders_state(self, idx):
+        return self.trader.get_state() #[self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought]
+
+    def construct_market_state(self,idx): 
+        return [self.data.Open[idx], self.data.High[idx], self.data.Low[idx], self.data.Close[idx], self.data.Volume[idx]]
+    
 
     def render(self): 
         if not self.render_ready: 
@@ -245,130 +233,6 @@ class TradingEnv(gym.Env):
         self.draw()
         pg.display.flip()
 
-    def draw_grid(self, alpha_screen, scaling_data): 
-
-        alpha_screen.fill([0,0,0,0])
-
-        x_label_pos = self.render_size[0] * 0.02
-        y_label_inc = self.render_size[1] * (1. - self.candle_start_height) / self.nb_y_label
-        y_label_pos = self.render_size[1] * (1. - self.candle_start_height)
-        y_labels = np.linspace(scaling_data.min(), scaling_data.max(), self.nb_y_label)
-        x_labels = np.linspace(0, self.render_size[1], self.nb_y_label)
-        for i in range(self.nb_y_label): 
-            # DRAWING GRID 
-            pg.draw.line(alpha_screen, (220,220,220,50), 
-                np.array([0, y_label_pos - 5]).astype(int), np.array([self.render_size[0], y_label_pos - 5]).astype(int) )
-            pg.draw.line(alpha_screen, (220,220,220,50), 
-                np.array([x_labels[i], 0]).astype(int), np.array([x_labels[i], self.render_size[1]]).astype(int) )
-
-            # self.screen.blit(alpha_screen,(0,0))            
-            # WRITING LABELS
-            label = self.font.render('{:.1f}'.format(y_labels[i]), 50, (250,250,250))
-            self.screen.blit(label, np.array([x_label_pos, y_label_pos - 30]).astype(int))
-            y_label_pos -= y_label_inc
-    def draw_candles(self, alpha_screen,data, scaling_data, y_magn, colors): 
-
-        rect_width = 2 * (self.render_size[0]/data.shape[0])
-
-        x_pos = self.render_size[0]* 0.5 - rect_width * data.shape[0] * 0.5
-        y_pos = data[:,1] + data[:,2]
-        
-        x_pos_vol = [x_pos]
-
-        
-        color = colors[0]
-        for i in range(data.shape[0]): 
-
-            rect_height = np.abs(data[i,0] - data[i,-1]) * y_magn
-            rect_center = ((data[i,0] + data[i,1]) * 0.5 - scaling_data.min()) * y_magn 
-
-            shape = np.array([x_pos, 
-                             self.render_size[1] * (1. - self.candle_start_height) - rect_center, 
-                             rect_width * 0.9,
-                             0.5 * rect_height], dtype = int)
-            
-
-            line_height = np.abs(data[i,1] - data[i,2]) * y_magn
-         
-            line_up = np.array([x_pos + rect_width * 0.5 - 2, self.render_size[1] * (1. - self.candle_start_height) -  rect_center + 0.5 * line_height]).astype(int)
-            line_down = np.array([x_pos + rect_width * 0.5 - 2, self.render_size[1] * (1. - self.candle_start_height) -  rect_center - 0.5 * line_height]).astype(int)
-            
-            line_height = line_height.astype(int)
-            
-            if i > 0: 
-                color = colors[1] if (data[i,0] + data[i,1]) * 0.5 > (data[i-1,0] + data[i-1,1])*0.5 else colors[0] 
-
-            pg.draw.rect(self.screen, color, list(shape))
-            pg.draw.line(alpha_screen, (250,250,250,80), line_up, line_down, width = 2)
-
-            x_pos += rect_width
-            x_pos_vol.append(x_pos)
-
-        return rect_width, x_pos_vol
-
-    def draw_agent(self, alpha_screen, scaling_data, y_magn, rect_width, colors): 
-
-        center_pos_x = self.render_size[0] * 0.5 
-        self.screen.blit(alpha_screen,(0,0))
-
-        if(len(self.draw_order_history) > 1): 
-            for i in reversed(range(1, len(self.draw_order_history))):
-
-                height_current = self.render_size[1] * (1. - self.candle_start_height) - (self.draw_order_history[i] - scaling_data.min()) * y_magn
-                height_previous = self.render_size[1] * (1. - self.candle_start_height) - (self.draw_order_history[i-1] - scaling_data.min()) * y_magn
-
-
-                pg.draw.line(self.screen, colors[-1], 
-                             np.array([center_pos_x, height_current]).astype(int), 
-                             np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 8)
-
-                if self.show_random_trader: 
-                    random_trader_height_current = self.render_size[1] * (1. - self.candle_start_height) - (self.random_trader_draw_order_history[i] - scaling_data.min()) * y_magn
-                    random_trader_height_previous = self.render_size[1] * (1. - self.candle_start_height) - (self.random_trader_draw_order_history[i-1] - scaling_data.min()) * y_magn
-                    pg.draw.line(self.screen, colors[0], 
-                             np.array([center_pos_x, random_trader_height_current]).astype(int), 
-                             np.array([center_pos_x - rect_width, random_trader_height_previous]).astype(int), width = 1)
-                    if i == len(self.draw_order_history) -1:
-
-                        line_col = [239, 192, 0] if height_current < random_trader_height_current else (0,0,0) 
-                        pg.draw.line(self.screen, line_col, 
-                                np.array([center_pos_x, random_trader_height_current]).astype(int), 
-                                np.array([center_pos_x, height_current]).astype(int))
-                        for h in [height_current, random_trader_height_current]: 
-                            pg.draw.line(self.screen, line_col, 
-                                np.array([center_pos_x - 5, h - 5]).astype(int), 
-                                np.array([center_pos_x + 5, h + 5]).astype(int))
-                        info = self.font.render('{:.1f}'.format(self.draw_order_history[-1] - self.random_trader_draw_order_history[-1]), 50, line_col)
-                        self.screen.blit(info, np.array([center_pos_x + 20, 0.5 * (height_current + random_trader_height_current)]).astype(int))
-
-
-                center_pos_x -= rect_width
-    
-    def draw_volumes(self, alpha_screen, volumes, volume_magn, x_pos_vol): 
-        volumes = np.hstack([np.array(x_pos_vol[1:]).reshape(-1,1), volumes.reshape(-1,1)])
-        volumes[:,1] = self.render_size[1] - volumes[:,1] * volume_magn
-        volumes = np.vstack([np.array([volumes[0,0], self.render_size[1]]).reshape(1,-1), 
-                             volumes,
-                             np.array([volumes[-1,0], self.render_size[1]]).reshape(1,-1)])
-        pg.draw.line(self.screen, (0,0,0), np.array([0, self.render_size[1] *  self.graph_height_ratio - 5]).astype(int), np.array([self.render_size[0], self.render_size[1] * self.graph_height_ratio - 5]).astype(int), width = 6)
-        pg.draw.polygon(self.screen, ((150,30,30)), volumes.astype(int), width = 0)
-    def draw_infos(self): 
-        viz_data = "Steps:                       {}/{}\nNet_Worth:            {:.2f}\nBaseline:                 {:.2f}\nBaselineDelta:            {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}\nOrders:                     {}".format(self.current_ts,
-                                                                                                                                       self.ep_timesteps,
-                                                                                                                                       self.net_worth, 
-                                                                                                                                       self.baseline_value,
-                                                                                                                                       self.net_worth - self.baseline_value,  
-                                                                                                                                       self.ep_reward,
-                                                                                                                                       self.compute_reward(), 
-                                                                                                                                       self.balance,
-                                                                                                                                       self.stock_held,
-                                                                                                                                       self.stock_bought, 
-                                                                                                                                       self.stock_sold, 
-                                                                                                                                       self.nb_ep_orders)
-        for i,vz in enumerate(viz_data.split('\n')): 
-            label = self.font.render(vz, 50, (250,250,250))
-            self.screen.blit(label, np.array([self.render_size[0] * 0.7, self.render_size[1] * (0.45 + i * 0.05)]).astype(int))
-
     def draw(self): 
         colors = [(220,0,0), (0,220,0), (0,80,220)]
         data_idx = [np.clip(self.current_index - int(self.render_window_samples * 0.5), 0, self.data.shape[0]), 
@@ -381,23 +245,30 @@ class TradingEnv(gym.Env):
         data = self.data.drop(['Date', 'Volume'] ,axis = 1).values[data_idx[0]:data_idx[1], :]
         agent_hist = np.array(self.orders_history)[:,1]
         scaling_data = np.hstack([data.flatten()*1.2, data.flatten()*0.8, 
-                       np.array(self.draw_order_history).flatten() * 1.05, np.array(self.draw_order_history).flatten() * 0.95])
+                       np.array(self.trader.net_worth_history).flatten() * 1.05, np.array(self.trader.net_worth_history).flatten() * 0.95])
         
         y_magn = (self.render_size[1] * self.graph_height_ratio) / (scaling_data.max() - scaling_data.min())
         
         volumes = self.data['Volume'].values[data_idx[0]:data_idx[1]]
         volume_magn = (self.render_size[1] * (1. - self.graph_height_ratio)) / (self.data.Volume.max() - self.data.Volume.min())
 
+        trader_dict = {'trader':self.trader,
+                       'baseline': self.baseline_trader, 
+                       'random': self.random_trader}
+
+        trader_color_dict = {'trader':(104,225,202),
+                       'baseline': (241,144,202), 
+                       'random': (185,33,227)}
 
         alpha_screen = self.screen.convert_alpha()
-        self.draw_grid(alpha_screen, scaling_data)
-        rect_width, x_pos_vol = self.draw_candles(alpha_screen, data, scaling_data, y_magn, colors)
-        self.draw_agent(alpha_screen, scaling_data, y_magn, rect_width, colors)
-        self.draw_volumes(alpha_screen, volumes, volume_magn, x_pos_vol)
-        self.draw_infos()        
+        env_utils.draw_grid(self.screen, self.render_size, self.candle_start_height, self.nb_y_label, alpha_screen, scaling_data, self.font)
+        rect_width, x_pos_vol = env_utils.draw_candles(self.screen, self.render_size, self.candle_start_height, alpha_screen, data, scaling_data, y_magn, colors)
+        env_utils.draw_agent(self.screen, self.render_size, self.candle_start_height, alpha_screen, scaling_data, y_magn, 
+                             trader_dict, trader_color_dict, rect_width, colors, self.font)
+        env_utils.draw_volumes(self.screen, self.render_size, self.graph_height_ratio, 
+                            alpha_screen, volumes, volume_magn, x_pos_vol)
+        # env_utils.draw_infos(self) 
         
-        
-
 class TradingEnv_State(TradingEnv): 
 
     def get_env_specs(self): 
@@ -763,7 +634,10 @@ class TradingEnv_State2(TradingEnv_State):
         return self.get_obs(), reward, done, {}
 
 if __name__ == '__main__': 
-    env = TradingEnv_State2()
+    # env = TradingEnv_State2()
+    env = TradingEnv()
+    env.set_data('aapl.csv')
+    env.set_lbw(20)
     s = env.reset()
 
     print('State shape: {}\nState:{}'.format(s.shape, env.get_formatted_obs()))
@@ -776,7 +650,7 @@ if __name__ == '__main__':
         s = env.reset()
         while not done: 
             action = env.action_space.sample()
-
+            print('{}\n\n'.format(env.get_formatted_obs()))
             ns, r, done, info = env.step(action)
             ep_reward += r
             env.render()
