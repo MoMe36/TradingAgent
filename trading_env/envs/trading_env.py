@@ -114,7 +114,32 @@ class TradingEnv(gym.Env):
         self.lookback_window = lbw
         self.initalize_env()
 
+    def compute_sma(self, window = 5): 
+       
+        sma = np.zeros((self.data.shape[0]))
+        for i in range(self.data.shape[0]):
+            
+            if i == 0: 
+                sma[i] = self.data.Close.values[0]
+            else: 
+
+                sma[i] = np.mean(self.data.Close.values[np.max([0, i - window]) : i])
+        return sma
+    def compute_moving_averages(self): 
+        smas = [self.compute_sma(d) for d in [5,20,100]]
+
+
+
+        plt.plot(self.data.Close.values, label = 'truth')
+        for sma, l in zip(smas, [5,20,50]): 
+            plt.plot(sma, label = '{}'.format(l))
+        plt.legend()
+        plt.show()
+
+
     def initalize_env(self): 
+
+        self.compute_moving_averages()
         
         self.market_history = deque(maxlen = self.lookback_window)
         self.orders_history = deque(maxlen = self.lookback_window) 
