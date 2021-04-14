@@ -153,8 +153,10 @@ class TradingEnv(gym.Env):
         current_price = np.random.uniform(self.data.Low[self.current_index], self.data.High[self.current_index])
         
         self.baseline_trader.update(0, current_price) # Always buys (= hold)
-        self.trader.update(action,current_price)
+        trader_state, made_order = self.trader.update(action,current_price)
         self.random_trader.update(self.get_random_action(),current_price)
+
+        self.nb_ep_orders += made_order
 
 
         self.orders_history.append(self.construct_orders_state(self.current_index))
@@ -267,7 +269,7 @@ class TradingEnv(gym.Env):
                              trader_dict, trader_color_dict, rect_width, colors, self.font)
         env_utils.draw_volumes(self.screen, self.render_size, self.graph_height_ratio, 
                             alpha_screen, volumes, volume_magn, x_pos_vol)
-        # env_utils.draw_infos(self) 
+        env_utils.draw_infos(self) 
         
 class TradingEnv_State(TradingEnv): 
 

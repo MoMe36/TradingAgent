@@ -68,15 +68,16 @@ def draw_candles(screen, render_size, candle_start_height, alpha_screen,data, sc
 def draw_agent(screen, render_size, 
               candle_start_height, alpha_screen,
               scaling_data, y_magn, orders_hist, orders_color,
-              rect_width, colors, font): 
+              rect_width, colors, font, offset = 40): 
 
     center_pos_x = render_size[0] * 0.5 
     screen.blit(alpha_screen,(0,0))
 
     orders_length = len(list(orders_hist.values())[0].net_worth_history)
 
-
     for i in reversed(range(1, orders_length)):
+        current_heights = []
+
         for trader, trader_color in zip(list(orders_hist.values()), list(orders_color.values())):  
 
             order_hist = trader.net_worth_history
@@ -87,6 +88,25 @@ def draw_agent(screen, render_size,
             pg.draw.line(screen, trader_color, 
                          np.array([center_pos_x, height_current]).astype(int), 
                          np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 8)
+
+            current_heights.append(height_current)
+
+
+        if i == orders_length -1 :
+            for j in range(1, len(current_heights)):
+                line_col = orders_color[list(orders_color.keys())[j]] if current_heights[j] > current_heights[0] else (0,0,0) 
+                pg.draw.line(screen, line_col, 
+                        np.array([center_pos_x + offset*(j-1), current_heights[j]]).astype(int), 
+                        np.array([center_pos_x + offset*(j-1), current_heights[j-1]]).astype(int), width = 2)
+                for h in [current_heights[j], current_heights[j-1]]: 
+                    pg.draw.line(screen, line_col, 
+                        np.array([center_pos_x - 5, h - 5]).astype(int) + np.array([offset*(j-1),0]).astype(int), 
+                        np.array([center_pos_x + 5, h + 5]).astype(int) + np.array([offset*(j-1),0]).astype(int), width = 2)
+                
+
+                info = font.render('{:.1f}'.format(orders_hist[list(orders_hist.keys())[0]].net_worth_history[-1] - orders_hist[list(orders_hist.keys())[j]].net_worth_history[-1]), 
+                                                    50, line_col)
+                screen.blit(info, np.array([center_pos_x + j * offset + 20, 0.5 * (current_heights[j] + current_heights[j-1])]).astype(int))
 
         # if show_random_trader: 
         #     random_trader_height_current = render_size[1] * (1. - candle_start_height) - (random_order_hist[i] - scaling_data.min()) * y_magn
@@ -123,15 +143,15 @@ def draw_volumes(screen, render_size, graph_height_ratio, alpha_screen, volumes,
 def draw_infos(env): 
     viz_data = "Steps:                       {}/{}\nNet_Worth:            {:.2f}\nBaseline:                 {:.2f}\nBaselineDelta:            {:.2f}\nEp_Reward:             {:.2f}\nReward:                   {:.2f}\nBalance:                 {:.2f}\nHeld:                        {:.3f}\nBought:                  {:.3f}\nSold:                        {:.3f}\nOrders:                     {}".format(env.current_ts,
                                                                                                                                    env.ep_timesteps,
-                                                                                                                                   env.net_worth, 
-                                                                                                                                   env.baseline_value,
-                                                                                                                                   env.net_worth - env.baseline_value,  
+                                                                                                                                   env.trader.net_worth, 
+                                                                                                                                   env.baseline_trader.net_worth,
+                                                                                                                                   env.trader.net_worth - env.baseline_trader.net_worth,  
                                                                                                                                    env.ep_reward,
                                                                                                                                    env.compute_reward(), 
-                                                                                                                                   env.balance,
-                                                                                                                                   env.stock_held,
-                                                                                                                                   env.stock_bought, 
-                                                                                                                                   env.stock_sold, 
+                                                                                                                                   env.trader.balance,
+                                                                                                                                   env.trader.stock_held,
+                                                                                                                                   env.trader.stock_bought, 
+                                                                                                                                   env.trader.stock_sold, 
                                                                                                                                    env.nb_ep_orders)
     for i,vz in enumerate(viz_data.split('\n')): 
         label = env.font.render(vz, 50, (250,250,250))
