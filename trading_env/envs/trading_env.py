@@ -11,6 +11,7 @@ from gym import spaces
 import os   
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import env_utils
+import ta 
 
 def get_data(filename):
 
@@ -50,8 +51,11 @@ class Trader:
 
         self.net_worth_history = [self.initial_balance]
 
-    def get_state(self): 
-        return [self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought]
+    def get_state(self, current_price = None):
+        if current_price != None: 
+            return [self.balance/current_price -1., self.net_worth/current_price -1.,  self.stock_held, self.stock_sold, self.stock_bought]
+        else: 
+            return [self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought]
 
     def update(self, action, current_price): 
         successful_order = 0
@@ -89,7 +93,7 @@ class TradingEnv(gym.Env):
 
 
     def __init__(self, filename = 'price.csv', 
-                       lookback_window = 3, 
+                       lookback_window = 5, 
                        ep_timesteps = 150): 
         super().__init__()
 
@@ -114,34 +118,35 @@ class TradingEnv(gym.Env):
         self.lookback_window = lbw
         self.initalize_env()
 
-    def compute_sma(self, window = 5): 
-       
-        sma = np.zeros((self.data.shape[0]))
-        for i in range(self.data.shape[0]):
-            
-            if i == 0: 
-                sma[i] = self.data.Close.values[0]
-            else: 
-
-                sma[i] = np.mean(self.data.Close.values[np.max([0, i - window]) : i])
-        return sma
-    def compute_moving_averages(self): 
-        smas = [self.compute_sma(d) for d in [5,20,100]]
-
-
-
-        plt.plot(self.data.Close.values, label = 'truth')
-        for sma, l in zip(smas, [5,20,50]): 
-            plt.plot(sma, label = '{}'.format(l))
-        plt.legend()
-        plt.show()
-
+    def augment_data(self): 
+        
+        self.emas = [5,25,100]
+        self.data['rsi'] = ta.momentum.RSIIndicator(close = self.data.Close, fillna = True).rsi()
+        self.data['stoch'] = ta.momentum.StochasticOscillator(high =  self.data.High, 
+                                             low = self.data.Low,
+                                             close = self.data.Close, fillna = True).stoch()
+        self.data['cmf'] = ta.volume.ChaikinMoneyFlowIndicator(close = self.data.Close, 
+                                                              low = self.data.Low, 
+                                                              high = self.data.High, 
+                                                              volume = self.data.Volume, 
+                                                              fillna = True).chaikin_money_flow()
+        for window in self.emas: 
+            self.data['ema{}'.format(window)] = ta.trend.EMAIndicator(close = self.data.Close, 
+                                                      window = window, 
+                                                      fillna = True).ema_indicator()
+        bb = ta.volatility.BollingerBands(close = self.data.Close,
+                                       fillna = True)
+        self.data['bb'] = bb.bollinger_pband()#(df.Close - bb.bollinger_mavg())/(2. * bb.bollinger_wband())
+        # self.data['close_n']
+        for ema in self.emas: 
+            self.data['close_n{}'.format(ema)] = self.data.Close / self.data['ema{}'.format(ema)]
+        self.data['rsi_n'] = self.data['rsi'] * 0.01
+        self.data['stoch_n'] = self.data['stoch'] * 0.01
 
     def initalize_env(self): 
 
-        self.compute_moving_averages()
-        
-        self.market_history = deque(maxlen = self.lookback_window)
+        self.augment_data()
+
         self.orders_history = deque(maxlen = self.lookback_window) 
 
         self.reset()
@@ -181,11 +186,8 @@ class TradingEnv(gym.Env):
         trader_state, made_order = self.trader.update(action,current_price)
         self.random_trader.update(self.get_random_action(),current_price)
 
+        self.orders_history.append(self.trader.get_state(current_price))
         self.nb_ep_orders += made_order
-
-
-        self.orders_history.append(self.construct_orders_state(self.current_index))
-        self.market_history.append(self.construct_market_state(self.current_index))
 
         self.current_index += 1 
         self.current_ts += 1
@@ -208,18 +210,24 @@ class TradingEnv(gym.Env):
 
     def get_formatted_obs(self): 
 
-        market = pd.DataFrame(np.array(self.market_history), columns = 'Open,High,Low,Close,Volume'.split(','))
+        # market = pd.DataFrame(np.array(self.market_history), columns = 'Open,High,Low,Close,Volume'.split(','))
         orders = pd.DataFrame(np.array(self.orders_history), columns = 'Balance,NW,H,S,B'.split(','))
-        obs = pd.concat([market, orders], axis = 1)
+        feature_cols = [close for close in self.data.columns if close.startswith('close_n')]
+        feature_cols += ['rsi_n', 'stoch_n','bb']
+        obs = self.data[feature_cols].iloc[self.current_index - self.lookback_window:self.current_index,: ].reset_index(drop = True)
+        obs = pd.concat([obs, orders], axis = 1)
+
         return obs
 
     def get_obs(self): 
-        
+        # obs = self.get_formatted_obs()
+        # order_obs = self.trader.get_new_state()
+        # return np.hstack([obs.values.flatten(), order_obs])
         return self.get_formatted_obs().values.flatten() 
 
     def reset(self): 
 
-        self.current_index = np.random.randint(self.lookback_window + 2, self.data.shape[0] - (self.ep_timesteps + 1))
+        self.current_index = np.random.randint(self.lookback_window + 2 + np.max(self.emas), self.data.shape[0] - (self.ep_timesteps + 1))
         self.current_ts = 0 
         self.ep_reward = 0.
         self.nb_ep_orders = 0 
@@ -229,16 +237,18 @@ class TradingEnv(gym.Env):
         self.baseline_trader = Trader(self.trader.initial_balance)
         
 
-        for i in range(self.current_index - self.lookback_window, self.current_index): 
-            self.orders_history.append(self.construct_orders_state(i))
-            self.market_history.append(self.construct_market_state(i))
+        # for i in range(self.current_index - self.lookback_window, self.current_index): 
+        #     self.market_history.append(self.construct_market_state(i))
+        for i in range(self.lookback_window):
+            self.orders_history.append(self.trader.get_state(self.data.Open[self.current_index]))
         return self.get_obs()
 
-    def construct_orders_state(self, idx):
-        return self.trader.get_state() #[self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought]
+    # def construct_orders_state(self, idx):
+    #     return self.trader.get_state() #[self.balance, self.net_worth, self.stock_held, self.stock_sold, self.stock_bought]
 
-    def construct_market_state(self,idx): 
-        return [self.data.Open[idx], self.data.High[idx], self.data.Low[idx], self.data.Close[idx], self.data.Volume[idx]]
+    # def construct_market_state(self,idx): 
+        
+
     
 
     def render(self): 
@@ -269,10 +279,11 @@ class TradingEnv(gym.Env):
         if(data_idx[0] == data_idx[1]):
             return 
 
-        data = self.data.drop(['Date', 'Volume'] ,axis = 1).values[data_idx[0]:data_idx[1], :]
-        agent_hist = np.array(self.orders_history)[:,1]
-        scaling_data = np.hstack([data.flatten()*1.2, data.flatten()*0.8, 
-                       np.array(self.trader.net_worth_history).flatten() * 1.05, np.array(self.trader.net_worth_history).flatten() * 0.95])
+        # data = self.data.drop(['Date', 'Volume'] ,axis = 1).values[data_idx[0]:data_idx[1], :]
+        data = self.data[['High', 'Low', 'Open', 'Close']].iloc[data_idx[0]:data_idx[1],:].reset_index(drop = True)
+        data_bounds = np.array([data.max() * 1.02, data.min()*0.98]).flatten()
+        scaling_data = np.hstack([data_bounds, 
+                       np.array(self.trader.net_worth_history).flatten() * 1.02, np.array(self.trader.net_worth_history).flatten() * 0.98])
         
         y_magn = (self.render_size[1] * self.graph_height_ratio) / (scaling_data.max() - scaling_data.min())
         
@@ -663,8 +674,8 @@ class TradingEnv_State2(TradingEnv_State):
 if __name__ == '__main__': 
     # env = TradingEnv_State2()
     env = TradingEnv()
-    env.set_data('aapl.csv')
-    env.set_lbw(20)
+    # env.set_data('aapl.csv')
+    # env.set_lbw(20)
     s = env.reset()
 
     print('State shape: {}\nState:{}'.format(s.shape, env.get_formatted_obs()))
@@ -679,6 +690,7 @@ if __name__ == '__main__':
             action = env.action_space.sample()
             print('{}\n\n'.format(env.get_formatted_obs()))
             ns, r, done, info = env.step(action)
+            # print(ns[-1])
             ep_reward += r
             env.render()
         ep_rewards.append(ep_reward)

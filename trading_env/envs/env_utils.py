@@ -30,7 +30,8 @@ def draw_candles(screen, render_size, candle_start_height, alpha_screen,data, sc
     rect_width = 2 * (render_size[0]/data.shape[0])
 
     x_pos = render_size[0]* 0.5 - rect_width * data.shape[0] * 0.5
-    y_pos = data[:,1] + data[:,2]
+    # y_pos = data[:,1] + data[:,2]
+    y_pos = data.High + data.Low
     
     x_pos_vol = [x_pos]
 
@@ -38,8 +39,8 @@ def draw_candles(screen, render_size, candle_start_height, alpha_screen,data, sc
     color = colors[0]
     for i in range(data.shape[0]): 
 
-        rect_height = np.abs(data[i,0] - data[i,-1]) * y_magn
-        rect_center = ((data[i,0] + data[i,1]) * 0.5 - scaling_data.min()) * y_magn 
+        rect_height = np.abs(data.Open[i] - data.Close[i]) * y_magn
+        rect_center = ((data.Open[i] + data.Close[i]) * 0.5 - scaling_data.min()) * y_magn 
 
         shape = np.array([x_pos, 
                          render_size[1] * (1. - candle_start_height) - rect_center, 
@@ -47,7 +48,7 @@ def draw_candles(screen, render_size, candle_start_height, alpha_screen,data, sc
                          0.5 * rect_height], dtype = int)
         
 
-        line_height = np.abs(data[i,1] - data[i,2]) * y_magn
+        line_height = np.abs(data.High[i] - data.Low[i]) * y_magn
      
         line_up = np.array([x_pos + rect_width * 0.5 - 2, render_size[1] * (1. - candle_start_height) -  rect_center + 0.5 * line_height]).astype(int)
         line_down = np.array([x_pos + rect_width * 0.5 - 2, render_size[1] * (1. - candle_start_height) -  rect_center - 0.5 * line_height]).astype(int)
@@ -55,7 +56,7 @@ def draw_candles(screen, render_size, candle_start_height, alpha_screen,data, sc
         line_height = line_height.astype(int)
         
         if i > 0: 
-            color = colors[1] if (data[i,0] + data[i,1]) * 0.5 > (data[i-1,0] + data[i-1,1])*0.5 else colors[0] 
+            color = colors[1] if (data.Open[i] + data.High[i]) * 0.5 > (data.Open[i-1] + data.High[i-1])*0.5 else colors[0] 
 
         pg.draw.rect(screen, color, list(shape))
         pg.draw.line(alpha_screen, (250,250,250,80), line_up, line_down, width = 2)
