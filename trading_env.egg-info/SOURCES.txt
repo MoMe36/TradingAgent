@@ -1,3 +1,4 @@
+README.md
 setup.py
 trading_env.egg-info/PKG-INFO
 trading_env.egg-info/SOURCES.txt

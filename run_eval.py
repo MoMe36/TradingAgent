@@ -105,7 +105,7 @@ if __name__ == '__main__':
         s = env.reset()
         done = False 
         ep_reward = 0
-        net_worth_delta.append(env.net_worth)
+        net_worth_delta.append(env.trader.net_worth)
         ep_step_counter = 0
         ep_wins = 0 
         ep_wins_val = []
@@ -118,12 +118,12 @@ if __name__ == '__main__':
             else: 
                 action = model.predict(s, deterministic = args.deterministic)[0]
 
-            net_before_action = env.net_worth
+            net_before_action = env.trader.net_worth
             # print('{}\nAction:{}'.format(pd.DataFrame(s.reshape(10,10), columns = 'Open,High,Low,Close,Volume,Balance,NetWorth,Held,Sold,Bought'.split(',')), action))
             # print(pd.DataFrame(s.reshape(10,10), columns = 'Open,High,Low,Close,Volume,Balance,NetWorth,Held,Sold,Bought'.split(',')).NetWorth)
             # input()
             ns, r, done, info = env.step(action)
-            net_after_action = env.net_worth
+            net_after_action = env.trader.net_worth
             if(net_after_action > net_before_action): 
                 ep_wins += 1
                 ep_wins_val.append(net_after_action - net_before_action)
@@ -142,7 +142,7 @@ if __name__ == '__main__':
         avg_win.append(np.array(ep_wins_val).mean())
         avg_loss.append(np.array(ep_loss_val).mean())
         win_ratio.append(float(ep_wins)/float(ep_step_counter))
-        net_worth_delta[-1] = (env.net_worth - net_worth_delta[-1])
+        net_worth_delta[-1] = (env.trader.net_worth - net_worth_delta[-1])
         baseline_diff.append(env.get_baseline_diff())
         rewards.append(ep_reward)
         pbar.update(1)

@@ -109,25 +109,6 @@ def draw_agent(screen, render_size,
                                                     50, line_col)
                 screen.blit(info, np.array([center_pos_x + j * offset + 20, 0.5 * (current_heights[j] + current_heights[j-1])]).astype(int))
 
-        # if show_random_trader: 
-        #     random_trader_height_current = render_size[1] * (1. - candle_start_height) - (random_order_hist[i] - scaling_data.min()) * y_magn
-        #     random_trader_height_previous = render_size[1] * (1. - candle_start_height) - (random_order_hist[i-1] - scaling_data.min()) * y_magn
-        #     pg.draw.line(screen, colors[0], 
-        #              np.array([center_pos_x, random_trader_height_current]).astype(int), 
-        #              np.array([center_pos_x - rect_width, random_trader_height_previous]).astype(int), width = 2)
-        #     if i == len(order_hist) -1:
-
-        #         line_col = [239, 192, 0] if height_current < random_trader_height_current else (0,0,0) 
-        #         pg.draw.line(screen, line_col, 
-        #                 np.array([center_pos_x, random_trader_height_current]).astype(int), 
-        #                 np.array([center_pos_x, height_current]).astype(int))
-        #         for h in [height_current, random_trader_height_current]: 
-        #             pg.draw.line(screen, line_col, 
-        #                 np.array([center_pos_x - 5, h - 5]).astype(int), 
-        #                 np.array([center_pos_x + 5, h + 5]).astype(int))
-        #         info = font.render('{:.1f}'.format(order_hist[-1] - random_order_hist[-1]), 50, line_col)
-        #         screen.blit(info, np.array([center_pos_x + 20, 0.5 * (height_current + random_trader_height_current)]).astype(int))
-
 
         center_pos_x -= rect_width
 
