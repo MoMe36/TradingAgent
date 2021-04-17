@@ -158,7 +158,16 @@ class TradingEnv(gym.Env):
 
     def get_env_specs(self): 
 
-        specs = {'env_name':'Old'} 
+        specs = {'env_name':'new_version', 
+                 'tis_trend': 'ema_{}'.format(self.emas), 
+                 'tis_vola': 'bb',
+                 'tis_volu': 'chaikin', 
+                 'tis_mom': 'ris, stoch', 
+                 'lbw': self.lookback_window, 
+                 'reward_strategy':'deltaNW', 
+                 'ep_timesteps': self.ep_timesteps, 
+                 'init_idx': 'random_idx', 
+                 'init_b': '0.8-1.2_close'} 
         return specs 
 
     def get_random_action(self): 
