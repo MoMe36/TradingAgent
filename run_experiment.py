@@ -12,6 +12,12 @@ import glob
 from experiment_utils import activation_fns, envs
 
 
+# ================================================================================================================================
+# https://ai.plainenglish.io/combining-technical-indicators-with-deep-learning-for-stock-trading-aebf155fe22f
+# https://towardsdatascience.com/implementation-of-technical-indicators-into-a-machine-learning-framework-for-quantitative-trading-44a05be8e06
+# https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3690996
+# ================================================================================================================================
+
 def parse_params(params): 
     return {l[0]:l[1] for l in params} 
 

@@ -6,7 +6,7 @@
 # python sb_agent.py --train --name="net_worth_state10"
 # python sb_agent.py --train --dqn --name="net_worth_state10" 
 
-python run_experiment.py --env=BC_I --layers="512,512" --train_steps=20
+python run_experiment.py --env=BC_I --layers="1024,1024" --train_steps=50
 # python run_experiment.py --env=BC_S2 --layers="512,512" --train_steps=20
 # python run_experiment.py --env=BC_S --layers="256,256" --train_steps=20
 # python run_experiment.py --env=BC_S --layers="1024,1024" --train_steps=20

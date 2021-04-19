@@ -120,7 +120,7 @@ if __name__ == '__main__':
 
             net_before_action = env.trader.net_worth
             # print('{}\nAction:{}'.format(pd.DataFrame(s.reshape(10,10), columns = 'Open,High,Low,Close,Volume,Balance,NetWorth,Held,Sold,Bought'.split(',')), action))
-            # print(pd.DataFrame(s.reshape(10,10), columns = 'Open,High,Low,Close,Volume,Balance,NetWorth,Held,Sold,Bought'.split(',')).NetWorth)
+            # print(env.get_formatted_obs())
             # input()
             ns, r, done, info = env.step(action)
             net_after_action = env.trader.net_worth

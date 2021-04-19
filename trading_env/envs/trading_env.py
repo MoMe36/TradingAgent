@@ -120,26 +120,47 @@ class TradingEnv(gym.Env):
 
     def augment_data(self): 
         
-        self.emas = [5,25,100]
-        self.data['rsi'] = ta.momentum.RSIIndicator(close = self.data.Close, fillna = True).rsi()
+        # self.emas = [5,10,20]
+        # self.emas = [5, 15]
+        # self.emas = [15]
+        # self.emas = [3]
+        self.emas = [3, 14]
+        self.data['rsi'] = ta.momentum.RSIIndicator(close = self.data.Close,
+                                                    fillna = True, 
+                                                    window = self.emas[1]).rsi()
         self.data['stoch'] = ta.momentum.StochasticOscillator(high =  self.data.High, 
                                              low = self.data.Low,
-                                             close = self.data.Close, fillna = True).stoch()
+                                             close = self.data.Close, 
+                                             window = self.emas[1], 
+                                             fillna = True).stoch()
+        
+        macd = ta.trend.MACD(close = self.data.Close, fillna = True)
+        self.data['macd'] = (macd.macd()/ macd.macd_signal()) - 1.
+
         self.data['cmf'] = ta.volume.ChaikinMoneyFlowIndicator(close = self.data.Close, 
                                                               low = self.data.Low, 
                                                               high = self.data.High, 
                                                               volume = self.data.Volume, 
+                                                              window = self.emas[0],
                                                               fillna = True).chaikin_money_flow()
         for window in self.emas: 
             self.data['ema{}'.format(window)] = ta.trend.EMAIndicator(close = self.data.Close, 
                                                       window = window, 
                                                       fillna = True).ema_indicator()
+            self.data['sma{}'.format(window)] = ta.trend.SMAIndicator(close = self.data.Close, 
+                                                                       window = window, 
+                                                                       fillna = True).sma_indicator()
         bb = ta.volatility.BollingerBands(close = self.data.Close,
+                                       window = self.emas[0], 
                                        fillna = True)
-        self.data['bb'] = bb.bollinger_pband()#(df.Close - bb.bollinger_mavg())/(2. * bb.bollinger_wband())
+        self.data['bb'] = bb.bollinger_pband()
+        self.data['trix'] = ta.trend.TRIXIndicator(close = self.data.Close, 
+                                            window = self.emas[0], 
+                                            fillna = True).trix()
         # self.data['close_n']
-        for ema in self.emas: 
-            self.data['close_n{}'.format(ema)] = self.data.Close / self.data['ema{}'.format(ema)]
+        for window in self.emas: 
+            # self.data['close_n{}'.format(ema)] = (self.data.Close / self.data['ema{}'.format(ema)]) - 1 
+            self.data['close_n{}'.format(window)] = (self.data.Close / self.data['sma{}'.format(window)]) - 1 
         self.data['rsi_n'] = self.data['rsi'] * 0.01
         self.data['stoch_n'] = self.data['stoch'] * 0.01
 
@@ -215,18 +236,22 @@ class TradingEnv(gym.Env):
         return self.get_obs(), reward, done, {}
 
     def compute_reward(self): 
-        return (self.trader.net_worth - self.trader.prev_net_worth)*0.01
+        return (self.trader.net_worth - self.trader.prev_net_worth)*0.1
+    
+    def get_baseline_diff(self):
+        return self.trader.net_worth - self.baseline_trader.net_worth
 
     def get_formatted_obs(self): 
 
         # market = pd.DataFrame(np.array(self.market_history), columns = 'Open,High,Low,Close,Volume'.split(','))
         orders = pd.DataFrame(np.array(self.orders_history), columns = 'Balance,NW,H,S,B'.split(','))
         feature_cols = [close for close in self.data.columns if close.startswith('close_n')]
-        feature_cols += ['rsi_n', 'stoch_n','bb']
+        feature_cols += ['bb', 'trix', 'macd', 'rsi_n', 'stoch_n']
         obs = self.data[feature_cols].iloc[self.current_index - self.lookback_window:self.current_index,: ].reset_index(drop = True)
-        obs = pd.concat([obs, orders], axis = 1)
-
+        vol_obs = self.data['Volume'][self.current_index - self.lookback_window:self.current_index] / np.mean(self.data.Volume[self.current_index - self.lookback_window:self.current_index]) - 1.
+        obs = pd.concat([obs, vol_obs.reset_index(drop = True), orders], axis = 1)
         return obs
+
 
     def get_obs(self): 
         # obs = self.get_formatted_obs()
@@ -760,7 +785,7 @@ def draw_agent(screen, render_size,
     for i in reversed(range(1, orders_length)):
         current_heights = []
 
-        for trader, trader_color in zip(list(orders_hist.values()), list(orders_color.values())):  
+        for idx_trader, (trader, trader_color) in enumerate(zip(list(orders_hist.values()), list(orders_color.values()))):  
 
             order_hist = trader.net_worth_history
             height_current = render_size[1] * (1. - candle_start_height) - (order_hist[i] - scaling_data.min()) * y_magn
@@ -769,7 +794,7 @@ def draw_agent(screen, render_size,
 
             pg.draw.line(screen, trader_color, 
                          np.array([center_pos_x, height_current]).astype(int), 
-                         np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 8)
+                         np.array([center_pos_x - rect_width, height_previous]).astype(int), width = 8 if idx_trader == 0 else 3)
 
             current_heights.append(height_current)
 
