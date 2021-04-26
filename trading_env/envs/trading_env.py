@@ -340,7 +340,22 @@ class TradingEnv(gym.Env):
         draw_volumes(self.screen, self.render_size, self.graph_height_ratio, 
                             alpha_screen, volumes, volume_magn, x_pos_vol)
         draw_infos(self) 
-        
+
+
+
+
+class MCDEnv(TradingEnv): 
+    def __init__(self): 
+        super().__init__(filename = 'MCD.csv')
+
+    def get_env_specs(self): 
+
+        specs = super().get_env_specs()
+        specs['env_name'] = 'MCD'
+        return specs 
+
+
+    
 class TradingEnv_State(TradingEnv): 
 
     def get_env_specs(self): 

@@ -78,6 +78,8 @@ if __name__ == '__main__':
 
 
 
+
+
     deterministic = args.deterministic
 
     if not args.random_agent: 
@@ -90,6 +92,8 @@ if __name__ == '__main__':
     env = gym.make('Trading-{}'.format(env_nb))
     if int(args.ep_ts) != 0: 
         env.ep_timesteps = int(args.ep_ts)
+
+    env.set_data('MCD.csv')
 
     rewards = []
     baseline_diff = []

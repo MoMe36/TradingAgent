@@ -8,6 +8,4 @@ activation_fns = {'relu' :torch.nn.ReLU,
 envs = {'BC_I': 'v0',
         'BC_S': 'v1',
         'BC_S2':'v2',
-        'aapl': 'v4', 
-        'BC_A': 'v3', 
-        'MCD': 'v5'}
+        'MCD': 'v3'}
