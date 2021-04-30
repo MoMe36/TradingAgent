@@ -74,6 +74,7 @@ if __name__ == '__main__':
     parser.add_argument('--env_id', default = 'BC_N')
     parser.add_argument('--do_plot', action = 'store_true')
     parser.add_argument('--ep_ts', default = '0')
+    parser.add_argument('--set_stock', default = '')
     args = parser.parse_args()
 
 
@@ -93,7 +94,8 @@ if __name__ == '__main__':
     if int(args.ep_ts) != 0: 
         env.ep_timesteps = int(args.ep_ts)
 
-    env.set_data('MCD.csv')
+    if args.set_stock != '': 
+        env.set_data(args.set_stock)
 
     rewards = []
     baseline_diff = []
@@ -152,7 +154,9 @@ if __name__ == '__main__':
         pbar.update(1)
     pbar.close()
 
-    agent_name = 'rand' if args.random_agent else '{:04d}{}'.format(int(args.agent_id), 'd' if args.deterministic else '')
+    agent_name = 'rand' if args.random_agent else '{:04d}{}{}'.format(int(args.agent_id), 
+                                                                    'd' if args.deterministic else '',
+                                                                     args.set_stock)
     base_recap_path = 'trained_models/{}/stats/'.format(args.env_id)
     base_plot_path = 'trained_models/{}/plots/'.format(args.env_id)
     if not os.path.exists(base_recap_path): 
