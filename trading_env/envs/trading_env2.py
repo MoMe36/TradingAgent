@@ -29,10 +29,18 @@ class TradingEnvF(gym.Env):
         self.construct_window = self.ep_length + self.max_sma
         self.cum_windows = [10,20,30,50,60]
 
+        self.to_train()
         self.set_data('btc.csv')
 
         self.action_space = gym.spaces.Discrete(2)
         self.observation_space = gym.spaces.Box(shape = self.reset().shape, low = -50., high = 50.)
+        
+
+    def to_test(self): 
+        self.do_augment = False
+
+    def to_train(self): 
+        self.do_augment = True
 
     def set_data(self, filename): 
         self.data = get_data(filename) 
@@ -50,35 +58,43 @@ class TradingEnvF(gym.Env):
 
     def generate_data(self): 
 
-        alpha = np.random.uniform(0.,1.)
-        interp_extremes = np.random.randint(0, self.pca_data.shape[0], size = (2))
-        t0 = self.pca_data_transformed[interp_extremes[0]]
-        t1 = self.pca_data_transformed[interp_extremes[1]]
-        t0_r = self.pca.inverse_transform(t0)
-        t1_r = self.pca.inverse_transform(t1)
-        lerped = (alpha * t0_r + (1. - alpha) * t1_r).flatten()
+        if self.do_augment: 
+            alpha = np.random.uniform(0.,1.)
+            interp_extremes = np.random.randint(0, self.pca_data.shape[0], size = (2))
+            t0 = self.pca_data_transformed[interp_extremes[0]]
+            t1 = self.pca_data_transformed[interp_extremes[1]]
+            t0_r = self.pca.inverse_transform(t0)
+            t1_r = self.pca.inverse_transform(t1)
+            lerped = (alpha * t0_r + (1. - alpha) * t1_r).flatten()
 
-        close = lerped[:int(lerped.shape[0]/2)]
-        volume = lerped[int(lerped.shape[0]/2):]
+            close = lerped[:int(lerped.shape[0]/2)]
+            volume = lerped[int(lerped.shape[0]/2):]
 
 
-        stds_close = []
-        stds_vol = []
-        for idx in interp_extremes: 
-            stds_close.append(np.std(self.pca_data[idx,:int(self.pca_data.shape[1]/2)])**0.5)
-            stds_vol.append(np.std(self.pca_data[idx,int(self.pca_data.shape[1]/2):])**0.5)
+            stds_close = []
+            stds_vol = []
+            for idx in interp_extremes: 
+                stds_close.append(np.std(self.pca_data[idx,:int(self.pca_data.shape[1]/2)])**0.5)
+                stds_vol.append(np.std(self.pca_data[idx,int(self.pca_data.shape[1]/2):])**0.5)
+            
+            std_close = stds_close[0] * alpha + (1.- alpha) * stds_close[1]
+            std_vol = stds_vol[0] * alpha + (1.- alpha) * stds_vol[1]
+
+            std_lerped = np.mean(np.sqrt(np.std(np.vstack([t0.reshape(1,-1), t1.reshape(1,-1)]), axis = 1)))
+            lerped_r = alpha * t0_r + (1. - alpha) * t1_r
+
+            noisy_close = close + self.get_brownian_noise(std_close)
+            noisy_vol = (volume + self.get_brownian_noise(std_vol)).clip(0., np.inf)
+
+            episode_data = pd.DataFrame(np.hstack([noisy_close.reshape(-1,1), noisy_vol.reshape(-1,1)]), columns = ['Close', 'Volume'])
+
+        else: 
+
+            ep_idx = np.random.randint(0, self.pca_data.shape[0])
+            close = self.pca_data[ep_idx, :self.construct_window]
+            volume = self.pca_data[ep_idx, self.construct_window:]
+            episode_data = pd.DataFrame(np.hstack([close.reshape(-1,1), volume.reshape(-1,1)]), columns = ['Close', 'Volume'])
         
-        std_close = stds_close[0] * alpha + (1.- alpha) * stds_close[1]
-        std_vol = stds_vol[0] * alpha + (1.- alpha) * stds_vol[1]
-
-        std_lerped = np.mean(np.sqrt(np.std(np.vstack([t0.reshape(1,-1), t1.reshape(1,-1)]), axis = 1)))
-        lerped_r = alpha * t0_r + (1. - alpha) * t1_r
-
-        noisy_close = close + self.get_brownian_noise(std_close)
-        noisy_vol = (volume + self.get_brownian_noise(std_vol)).clip(0., np.inf)
-
-        episode_data = pd.DataFrame(np.hstack([noisy_close.reshape(-1,1), noisy_vol.reshape(-1,1)]), columns = ['Close', 'Volume'])
-
         return episode_data
 
     def get_brownian_noise(self, std): 
@@ -136,6 +152,13 @@ class TradingEnvF(gym.Env):
         self.prev_net_worth = self.net_worth
 
 
+        if reward > 0 : 
+            self.episode_data['wins'].append(reward)
+            self.episode_data['losses'].append(0)
+        else: 
+            self.episode_data['wins'].append(0)
+            self.episode_data['losses'].append(np.abs(reward))
+
         self.episode_data['orders'].append(order)
         self.episode_data['rewards'].append(reward)
 
@@ -145,12 +168,29 @@ class TradingEnvF(gym.Env):
         if self.net_worth < 0.5 * self.initial_balance: 
             done = True 
 
-        return self.get_obs(), reward, done, {}
+        if done: 
+            info = self.parse_episode()
+        else: 
+            info = {}
+        return self.get_obs(), reward, done, info 
+
+    def parse_episode(self): 
+
+        ep_info = {'ep_rewards': np.sum(self.episode_data['rewards']), 
+                   'pct_wins': 100. * np.sum(np.where(np.array(self.episode_data['wins']) > 0 ,1.,0.)) / len(self.episode_data['wins']), 
+                   'pct_losses': 100. * np.sum(np.where(np.array(self.episode_data['losses']) > 0 ,1.,0.)) / len(self.episode_data['losses']), 
+                   'stock_appreciation': 100. * (self.episode_data['close'][-1] / self.episode_data['close'][0] - 1.), 
+                   'profit': 100. * (self.episode_data['net_worth'][-1] / self.episode_data['net_worth'][0] - 1.), 
+                   'baseline_ratio': 100. * (self.episode_data['net_worth'][-1]/self.episode_data['close'][-1] - 
+                                             self.episode_data['net_worth'][0]/self.episode_data['close'][0])}
+
+
+        return ep_info
 
     def get_obs(self): 
         
         obs = self.current_data.loc[self.ep_idx - self.obs_window: self.ep_idx,self.features].values.flatten()
-        obs = np.hstack([obs, np.array([self.balance, self.stocks])])
+        obs = np.hstack([obs, np.array([self.balance / self.current_data.Close[self.ep_idx], self.stocks])])
 
         return obs 
     def reset(self): 
@@ -161,7 +201,9 @@ class TradingEnvF(gym.Env):
                              'stocks':[],  
                              'net_worth':[],
                              'orders':[],
-                             'rewards':[]}
+                             'rewards':[], 
+                             'wins': [], 
+                             'losses': []}
 
         episode_data = self.generate_data()
         self.current_data = self.augment_data(episode_data)
@@ -196,6 +238,9 @@ class TradingEnvF(gym.Env):
         axes[1].plot(stocks.index, stocks)
         axes[1].scatter(stocks.index, stocks)
 
+        info = self.parse_episode()
+        for k in info.keys(): 
+            print('{}: {:.2f}'.format(k.upper(), info[k]))
 
         # axes[1].scatter(np.arange(len(self.episode_data['stocks'])), self.episode_data['stocks'], label = 'Stocks')
         plt.pause(0.1)
@@ -204,12 +249,18 @@ class TradingEnvF(gym.Env):
 if __name__ == '__main__': 
 
     env = TradingEnvF()
-    env.set_data('btc.csv')
+    env.set_data('btc_test.csv')
+    env.to_test()
     done = False 
     s = env.reset()
+    counter = 0
     while not done:   
-        action = 1. if np.random.uniform(0.,1.) > 0.9 else 0. #env.action_space.sample()
+        if counter % 5 == 0: 
+            counter = 0
+            action = env.action_space.sample()
         ns, r, done, info = env.step(action)
+        print(ns)
+        counter += 1
 
     env.render()
 
