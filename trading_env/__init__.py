@@ -22,6 +22,12 @@ register(
 )
 
 
+register(
+    id='Trading-v4',
+    entry_point='trading_env.envs:TradingEnvF',
+)
+
+
 
 # register(
 #     id='Trading-v1',

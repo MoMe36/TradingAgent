@@ -35,6 +35,7 @@ class TradingEnvF(gym.Env):
         self.action_space = gym.spaces.Discrete(2)
         self.observation_space = gym.spaces.Box(shape = self.reset().shape, low = -50., high = 50.)
         
+        self.info = {}
 
     def to_test(self): 
         self.do_augment = False
@@ -133,6 +134,8 @@ class TradingEnvF(gym.Env):
         reward = 0 
         order = 0
 
+        self.info = {}
+
         next_price = self.current_data.Close[self.ep_idx + 1]
         if action == 0: # BUY
             if self.balance > 0: 
@@ -169,10 +172,8 @@ class TradingEnvF(gym.Env):
             done = True 
 
         if done: 
-            info = self.parse_episode()
-        else: 
-            info = {}
-        return self.get_obs(), reward, done, info 
+            self.info = self.parse_episode()
+        return self.get_obs(), reward, done, self.info 
 
     def parse_episode(self): 
 
@@ -185,6 +186,8 @@ class TradingEnvF(gym.Env):
                                              self.episode_data['net_worth'][0]/self.episode_data['close'][0])}
 
 
+
+        self.metrics_names = list(ep_info.keys())
         return ep_info
 
     def get_obs(self): 
@@ -193,8 +196,7 @@ class TradingEnvF(gym.Env):
         obs = np.hstack([obs, np.array([self.balance / self.current_data.Close[self.ep_idx], self.stocks])])
 
         return obs 
-    def reset(self): 
-
+    def reset(self):    
         self.episode_data = {'close':[], 
                              'volume':[],
                              'balance':[],
@@ -259,7 +261,6 @@ if __name__ == '__main__':
             counter = 0
             action = env.action_space.sample()
         ns, r, done, info = env.step(action)
-        print(ns)
         counter += 1
 
     env.render()
