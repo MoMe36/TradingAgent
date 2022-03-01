@@ -7,11 +7,11 @@
 # python sb_agent.py --train --dqn --name="net_worth_state10" 
 
 # python run_experiment.py --env=BC_I --layers="1024,1024" --train_steps=50
-python run_experiment.py --env=MCD --layers="1024,1024" --train_steps=50
+# python run_experiment.py --env=MCD --layers="1024,1024" --train_steps=50
 # python run_experiment.py --env=BC_S2 --layers="512,512" --train_steps=20
 # python run_experiment.py --env=BC_S --layers="256,256" --train_steps=20
 # python run_experiment.py --env=BC_S --layers="1024,1024" --train_steps=20
-# python run_eval.py --env=BC_S --random_agent --do_plot --eval_ep=10
+python run_eval.py --env=BC_S --random_agent --do_plot --eval_ep=10
 # python run_eval.py --env=BC_S --agent_id=0 --deterministic
 # python run_eval.py --env=BC_S --agent_id=1 --deterministic
 # python run_eval.py --env=BC_S --agent_id=2 --deterministic --do_plot
