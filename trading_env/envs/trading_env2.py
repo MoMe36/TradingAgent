@@ -224,8 +224,12 @@ class TradingEnvF(gym.Env):
 
     def render(self): 
 
-        f, axes = plt.subplots(2,1, figsize = (15,9))
-        axes = axes.flatten()
+        if not plt.fignum_exists(1): 
+            f, axes = plt.subplots(2,1, figsize = (15,9))
+            axes = axes.flatten()
+        else: 
+            f = plt.gcf()
+            axes = f.axes
 
         axes[0].plot(self.episode_data['close'], label = 'Close', linewidth = 3)
         axes[0].plot(self.episode_data['net_worth'], label = 'NetWorth')
@@ -241,12 +245,15 @@ class TradingEnvF(gym.Env):
         axes[1].scatter(stocks.index, stocks)
 
         info = self.parse_episode()
+        print('\n'*2 + '='*10)
         for k in info.keys(): 
             print('{}: {:.2f}'.format(k.upper(), info[k]))
 
         # axes[1].scatter(np.arange(len(self.episode_data['stocks'])), self.episode_data['stocks'], label = 'Stocks')
         plt.pause(0.1)
         input('Press enter to quit viz')
+        for ax in axes: 
+            ax.clear()
 
 if __name__ == '__main__': 
 

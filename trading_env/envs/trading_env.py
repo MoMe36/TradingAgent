@@ -92,7 +92,7 @@ class TradingEnv(gym.Env):
     metadata = {'render.modes':['human']}
 
 
-    def __init__(self, filename = 'price.csv', 
+    def __init__(self, filename = 'btc.csv', 
                        lookback_window = 5, 
                        ep_timesteps = 150): 
         super().__init__()
@@ -370,7 +370,7 @@ class TradingEnv_State(TradingEnv):
         return specs 
 
 
-    def __init__(self, filename = 'price.csv', 
+    def __init__(self, filename = 'btc.csv', 
                         lookback_window = 10, 
                         ep_timesteps = 150): 
 
