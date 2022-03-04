@@ -22,9 +22,13 @@ def ta_complete(df):
 class SEnv(gym.Env): 
     metadata = {'render.modes':['human']}
     
-    def __init__(self, filename = '../../merged_data.csv', 
+    def __init__(self, filename = None, 
                  look_back = 5, ep_length = 240, efficiency = 0.7, max_output = 0.25): 
         super().__init__()
+
+
+        if filename == None: 
+            filename =  './merged_data.csv'
         data = pd.read_csv(filename)
         # print(data.columns)
         self.to_drop = ['input_hour', 'price_mw', 'prod_mw', 'sma_price']
@@ -39,6 +43,9 @@ class SEnv(gym.Env):
         self.max_output = max_output
         self.stock = 0. 
         self.efficiency = efficiency
+
+        self.action_space = spaces.Box(low = -1., high = 1. , shape = (1,))
+        self.observation_space = spaces.Box(low = -20., high = 20., shape = (66,))
 
     def reset(self): 
 
@@ -123,7 +130,7 @@ class SEnv(gym.Env):
 
 if __name__ == "__main__": 
 
-    env = SEnv()
+    env = SEnv('../../merged_data.csv')
     s = env.reset() 
 
     i = 0 
