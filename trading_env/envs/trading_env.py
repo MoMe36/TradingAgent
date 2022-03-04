@@ -5,6 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt 
 import pygame as pg 
 import time
+import math
 from collections import deque 
 import gym 
 from gym import spaces
@@ -13,13 +14,18 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 # import env_utils
 import ta 
 
-def get_data(filename):
+import seaborn as sns
+sns.set_theme()
 
-    current_path = os.path.realpath(__file__).split('/')[:-1]
-    path = os.path.join(*current_path)
-    path = os.path.join('/', path, filename)
-    data = pd.read_csv(path)
-    return data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']].dropna().reset_index(drop = True)
+def get_data(filename):
+    data = pd.read_csv(filename)
+
+    data.drop(columns=['Consommation France MW','Consommation Occitanie MW','Prévision France 24h MW','Prévision France 48h MW'], inplace=True)
+    data = data.rename(columns = {'Unnamed: 0':'time','Production Eolmed MW':'prod','Prix bourse EPEX euros par MWh':'signal'})
+    data['time'] = pd.to_datetime(data['time'])
+    data['time_sec'] = (data.time - min(data.time)).dt.total_seconds()
+    data['time_hours'] = data['time'].map(lambda date: date.hour)
+    return data
 
 
 def get_scaler(data, min_max = True): 
@@ -166,7 +172,7 @@ class TradingEnv(gym.Env):
 
     def initalize_env(self): 
 
-        self.augment_data()
+        #self.augment_data()
 
         self.orders_history = deque(maxlen = self.lookback_window) 
 
@@ -721,8 +727,195 @@ class TradingEnv_State2(TradingEnv_State):
         return self.get_obs(), reward, done, {}
 
 
+class TradingEnv_Elec: 
+    def __init__(self, filename = 'btc.csv', 
+                       lookback_window = 5, 
+                       ep_timesteps = 240): 
 
 
+        self.show_random_trader = True
+
+        self.data = get_data(filename)
+        self.lookback_window = lookback_window
+        self.ep_timesteps = ep_timesteps
+        self.current_index = 0
+        self.current_ts = 0
+        self.stock = 0
+        self.money = 0
+        self.stock_max = 30
+        self.stock_max_h = 5
+
+        self.market_history = deque(maxlen = self.lookback_window)
+        self.prod_history = deque(maxlen = self.lookback_window)
+
+        self.market_result = []
+        self.prod_result = []
+
+        self.action_space = spaces.Discrete(2)
+
+    def get_env_specs(self): 
+
+        specs = {'folder_name':'BC_S', 
+                'env_name':'BC_S2', 
+                'reward_strategy':'deltaNW', 
+                'lookback_window': self.lookback_window, 
+                'ep_timesteps': self.ep_timesteps, 
+                'state': 'b_n,nw_n,stocks,open_n,high_n,low_n,close_n,mom,bb,vol_n', 
+                'init_idx': 'random_idx', 
+                'init_b': '0.8-1.2_close'} 
+        return specs 
+        
+    def get_current():
+        return self.current_index + self.current_ts
+
+    def reset(self, idx=0, shuffle=True): 
+        if shuffle == True:
+            self.current_index = np.random.randint(len(self.data) - self.ep_timesteps)
+        else:
+            self.current_index = idx
+        self.current_ts = 0
+        self.stock = 0
+        self.money = 0
+
+        self.market_result = []
+        self.prod_result = []
+
+        self.debug_idx = deque(maxlen = self.lookback_window)
+
+        for i in range(self.current_index - self.lookback_window, self.current_index): 
+            self.prod_history.append([self.stock, (self.data['prod'][self.current_index + self.current_ts]), 0])
+            self.market_history.append([(self.data['signal'][self.current_index + self.current_ts]), self.money, (self.data['time_hours'][self.current_index + self.current_ts]), 0])
+            self.debug_idx.append(i)
+        # print('Added idx: {}'.format(self.debug_idx))
+        # input()
+
+        self.prod_result.append([self.stock, (self.data['prod'][self.current_index + self.current_ts]), 0, 0])
+        self.market_result.append([(self.data['signal'][self.current_index + self.current_ts]), self.money, (self.data['time_hours'][self.current_index + self.current_ts]), 0, 0])
+
+        return self.get_obs()
+
+    def get_formatted_obs(self): 
+        prod = pd.DataFrame(np.array(self.prod_history), columns = 'stock,prod,e_vendu'.upper().split(','))
+        market = pd.DataFrame(np.array(self.market_history), columns = 'price,money,hour,action'.upper().split(','))
+        state = pd.concat([market, prod], axis = 1)
+        return state
+
+    def get_obs(self): 
+
+       return self.get_formatted_obs().values.flatten()
+
+    def step(self, action):
+        
+        if (action == 1) & ((self.stock + min(self.stock_max_h, self.data['prod'][self.current_index + self.current_ts])) <= self.stock_max):
+            p_stock = min(self.stock_max_h, self.data['prod'][self.current_index + self.current_ts])
+            self.stock += p_stock
+            e_vendu = self.data['prod'][self.current_index + self.current_ts] - p_stock
+            e_stock_vendu = 0
+            reward = self.data['signal'][self.current_index + self.current_ts]*e_vendu
+            self.money += reward
+            
+        else:
+            p_stock = 0
+            e_vendu = self.data['prod'][self.current_index + self.current_ts]
+            e_stock_vendu = min(self.stock_max*0.25, self.stock)*0.7*(1 - action)
+            reward = self.data['signal'][self.current_index + self.current_ts]*(e_vendu + e_stock_vendu)
+            self.money += reward
+            self.stock -= e_stock_vendu
+
+
+        self.prod_history.append([self.stock, (self.data['prod'][self.current_index + self.current_ts]), e_vendu + e_stock_vendu])
+        self.market_history.append([(self.data['signal'][self.current_index + self.current_ts]), self.money, (self.data['time_hours'][self.current_index + self.current_ts]), action])
+        self.prod_result.append([self.stock, (self.data['prod'][self.current_index + self.current_ts]), p_stock, e_vendu])
+        self.market_result.append([(self.data['signal'][self.current_index + self.current_ts]), self.money, (self.data['time_hours'][self.current_index + self.current_ts]), 0, reward])
+
+        self.current_ts += 1
+
+        done = False 
+        if self.current_ts == self.ep_timesteps: 
+            done = True
+
+        return self.get_obs(), reward, done, {}
+
+    def plot_result(self):
+        prod = pd.DataFrame(np.array(self.prod_result), columns = 'stock,prod,pstock, e_vendu'.upper().split(','))
+        market = pd.DataFrame(np.array(self.market_result), columns = 'price,money,hour,action,reward'.upper().split(','))
+        state = pd.concat([market, prod], axis = 1)
+
+        sns.lineplot(data=state.drop(['MONEY', 'HOUR', 'REWARD', 'ACTION', 'PRICE'], axis=1))
+        plt.show()
+
+def test_all_politics(feature='reward'):
+    env1 = TradingEnv_Elec(filename='data_rl.csv')
+    env2 = TradingEnv_Elec(filename='data_rl.csv')
+    env3 = TradingEnv_Elec(filename='data_rl.csv')
+
+    data = pd.read_csv('data_rl.csv')
+
+    idx = np.random.randint(len(data) - 124)
+    env1.reset(idx=idx, shuffle=False)
+    env2.reset(idx=idx, shuffle=False)
+    env3.reset(idx=idx, shuffle=False)
+
+    ep_reward = pd.DataFrame(np.array([[0, 0, 0]]), columns = 'politic1,politic2,politic3'.upper().split(','))
+    ep_energy = pd.DataFrame(np.array([[0, 0, 0, 0]]), columns = 'energy production,politic1 sale,politic2 sale,politic3 sale'.split(','))
+    i = 0
+    done = False
+    energy1 = 0
+    energy2 = 0
+    energy3 = 0
+    prod = 0
+    while not done:
+        rewards = []
+        energy = []
+        action1 = politic1(env1.get_formatted_obs().loc[4, 'HOUR'])
+        ns, r, done, info = env1.step(action1)
+        rewards.append(env1.get_formatted_obs().loc[4, 'MONEY'])
+        prod += env1.get_formatted_obs().loc[4, 'PROD']
+        energy.append(prod)
+        energy1 += env1.get_formatted_obs().loc[4, 'E_VENDU']
+        energy.append(energy1)
+        action2 = politic2(env2.get_formatted_obs().loc[4, 'HOUR'])
+        ns, r2, done, info = env2.step(action2)
+        rewards.append(env2.get_formatted_obs().loc[4, 'MONEY'])
+        energy2 += env2.get_formatted_obs().loc[4, 'E_VENDU']
+        energy.append(energy2)
+        action3 = politic3(env3.get_formatted_obs().loc[4, 'HOUR'])
+        ns, r3, done, info = env3.step(action3)
+        rewards.append(env3.get_formatted_obs().loc[4, 'MONEY'])
+        energy3 += env3.get_formatted_obs().loc[4, 'E_VENDU']
+        energy.append(energy3)
+        #print(env.get_formatted_obs().shape)
+        ep_reward.loc[i] = rewards
+        ep_energy.loc[i] = energy
+        i += 1
+    if feature == 'reward':
+        sns.lineplot(data=ep_reward)
+        plt.title('production and sale of energy across time')
+        plt.xlabel('time (h)')
+        plt.ylabel('argent (euros)')
+    elif feature == 'energy':
+        sns.lineplot(data=ep_energy)
+        plt.title('production and sale of energy across time')
+        plt.xlabel('time (h)')
+        plt.ylabel('energy (MW)')
+    plt.show()
+        
+def politic1(hour):
+    heures_creuses = [21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15, 16]
+    if hour in heures_creuses:
+        return 1
+    else:
+        return 0
+
+def politic2(hour):
+    return 0
+
+def politic3(hour):
+    heures_creuses = [5, 6, 7, 8, 13, 14, 15, 16, 21, 22, 23, 0]
+    if hour in heures_creuses:
+        return 1
+    else:
+        return 0
 
 def draw_grid(screen, render_size, candle_start_height, nb_y_label, alpha_screen, scaling_data, font): 
 
@@ -862,31 +1055,26 @@ def draw_infos(env):
 
 
 
-
-
-
 if __name__ == '__main__': 
     # env = TradingEnv_State2()
-    env = TradingEnv()
+    env = TradingEnv_Elec(filename='data_rl.csv')
     # env.set_data('aapl.csv')
     # env.set_lbw(20)
-    s = env.reset()
-
-    print('State shape: {}\nState:{}'.format(s.shape, env.get_formatted_obs()))
+    env.reset()
 
     done = False
     ep_rewards = []
-    for i in range(10): 
+    for i in range(1): 
         ep_reward = 0
         done = False 
         s = env.reset()
-        while not done: 
-            action = env.action_space.sample()
-            print('{}\n\n'.format(env.get_formatted_obs()))
+        while not done:
+            action = politic1(env.get_formatted_obs().loc[4, 'HOUR'])
+            #print('{}\n\n'.format(env.get_formatted_obs()))
             ns, r, done, info = env.step(action)
-            # print(ns[-1])
+            #print(env.get_formatted_obs().shape)
             ep_reward += r
-            env.render()
         ep_rewards.append(ep_reward)
         print(np.mean(ep_rewards), np.std(ep_rewards))
-
+        env.plot_result()
+        test_all_politics('reward')
