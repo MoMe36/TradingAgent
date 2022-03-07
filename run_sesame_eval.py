@@ -40,20 +40,20 @@ class EnzoPolicy(Policy):
                                                               12, 13, 14, 
                                                               15, 16]).reshape(-1,1)).flatten())
     def act(self, state): 
-        hour = state[54]
+        hour = state[53]
         if hour in list(self.store_hours): 
             # input('store')
-            return 0.
+            return 1.
         else: 
             # input('sell')
-            return 1.
-
+            return -1.
 class Run: 
     def __init__(self, pol): 
         self.pol = pol 
         self.rewards = []
         self.actions = []
         self.stock = []
+        self.prod = []
 
     def run(self, env, idx): 
 
@@ -62,15 +62,18 @@ class Run:
         rewards = []
         actions = []
         stock = []
+        prod = []
         while not done: 
             action = self.pol.act(s)
             s, r, done, info = env.step(action)
             rewards.append(r*1000.)
             actions.append(action)
             stock.append(info['stock'])
+            prod.append(info['prod'])
         self.rewards.append(rewards)
         self.actions.append(actions)
         self.stock.append(stock)
+        self.prod.append(prod)
 
 
 if __name__ == "__main__":
@@ -78,13 +81,13 @@ if __name__ == "__main__":
     env_id = 'Trading-v5'
 
     env = gym.make(env_id)
-    # env.ep_length = 240
+    env.ep_length = 150
     enzo_pol = Run(EnzoPolicy())
-    model = Run(PPO_Trading(path_to_trained = './sesame_trained/sesame_3'))
+    model = Run(PPO_Trading(path_to_trained = './sesame_trained/sesame_0'))
     sell_policy  = Run(SellPolicy())
     random_policy = Run(Policy())
     
-    nb_eps = 5
+    nb_eps = 10
     rewards = []
     actions = []
     start_idx = np.random.randint(100, 6000, size = (nb_eps, ))
@@ -95,7 +98,7 @@ if __name__ == "__main__":
 
 
     for i in range(nb_eps): 
-        f, axes = plt.subplots(2,1, figsize = (15,10))
+        f, axes = plt.subplots(4,1, figsize = (15,20))
         axes = axes.flatten()
         axes[0].plot(np.cumsum(enzo_pol.rewards[i]), label = 'Enzo')
         axes[0].plot(np.cumsum(model.rewards[i]), label = 'PPO')
@@ -110,6 +113,17 @@ if __name__ == "__main__":
         axes[1].plot(random_policy.stock[i], label = 'Random')
         axes[1].set_title('Stock: {}'.format(start_idx[i]), weight = 'bold')
         axes[1].legend()
+
+        axes[2].plot(np.cumsum(enzo_pol.prod[i]), label = 'Enzo')
+        axes[2].plot(np.cumsum(model.prod[i]), label = 'PPO')
+        axes[2].plot(np.cumsum(sell_policy.prod[i]), label = 'Sell')
+        axes[2].plot(np.cumsum(random_policy.prod[i]), label = 'Random')
+        axes[2].set_title('Prod: {}'.format(start_idx[i]), weight = 'bold')
+        axes[2].legend()
+
+        axes[3].hist(model.actions[i], label = 'Ep: {}'.format(i))
+        axes[3].legend()
+
         plt.show()
         plt.close()
 
