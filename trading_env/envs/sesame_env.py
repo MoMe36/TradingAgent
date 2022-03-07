@@ -5,7 +5,7 @@ import os
 from gym import spaces 
 import ta 
 from sklearn.preprocessing import MinMaxScaler 
-
+import matplotlib.pyplot as plt 
 
 def ta_complete(df): 
 
@@ -14,6 +14,9 @@ def ta_complete(df):
     df['prod_n'] = df['prod_mw']/df['prod_mw'].mean() -1
     df['day_n'] = MinMaxScaler().fit_transform(df[['day']])
     df['hour_n'] = MinMaxScaler().fit_transform(df[['input_hour']])
+
+    # print(df.input_hour.max(), df.input_hour.min())
+    # input(df.hour_n.describe())
         
     df = df.dropna().reset_index(drop = True)
     # print(df.head())
@@ -47,11 +50,15 @@ class SEnv(gym.Env):
         self.action_space = spaces.Box(low = -1., high = 1. , shape = (1,))
         self.observation_space = spaces.Box(low = -20., high = 20., shape = (66,))
 
-    def reset(self): 
+    def reset(self, idx = None): 
 
         self.current_ts = 0
-        self.stock = 0. 
-        self.start_idx = np.random.randint(self.look_back +1, self.data.shape[0] - (self.ep_length+1))
+        if idx == None: 
+            self.stock = np.random.uniform(0.,1.) * self.max_stock
+            self.start_idx = np.random.randint(self.look_back +1, self.data.shape[0] - (self.ep_length+1))
+        else: 
+            self.stock = 0
+            self.start_idx = idx
 
         return self.get_obs()
 
@@ -123,7 +130,7 @@ class SEnv(gym.Env):
 
         done = True if self.current_ts == self.ep_length else False 
         r = cash_from_sale
-        return self.get_obs(), r, done, {}
+        return self.get_obs(), 0.001 * r, done, {'stock': self.stock}
 
 
 
@@ -135,8 +142,11 @@ if __name__ == "__main__":
 
     i = 0 
     done = False 
+    rewards = []
     while not done: 
         action = np.random.uniform(-1.,1.)
         ns, r, done, _ = env.step(action)
         i += 1 
+        rewards.append(r)
     print(i)
+    print(np.array(rewards).reshape(-1,1), np.sum(rewards), np.mean(rewards), np.max(rewards), np.min(rewards), np.std(rewards))
