@@ -26,9 +26,9 @@ class SEnv(gym.Env):
     metadata = {'render.modes':['human']}
     
     def __init__(self, filename = None, 
-                 look_back = 5, ep_length = 240, efficiency = 0.75, 
-                 max_output = 0.25, max_hourly_stock = 5., 
-                 max_stock = 100.): 
+                 look_back = 5, ep_length = 240, efficiency = 1., 
+                 max_output = 0.25, max_hourly_stock_ratio = 0.25, 
+                 max_stock = 50.): 
         super().__init__()
 
 
@@ -45,7 +45,7 @@ class SEnv(gym.Env):
         self.start_idx = 0 
         self.current_stock = 0.
         self.max_stock = max_stock
-        self.max_hourly_stock = max_hourly_stock
+        self.max_hourly_stock = max_hourly_stock_ratio * self.max_stock
         self.max_output = max_output
         self.stock = 0. 
         self.efficiency = efficiency
@@ -94,12 +94,13 @@ class SEnv(gym.Env):
 
     def step(self, action): 
 
+
         self.current_ts += 1 
 
-        action = (np.clip(action, 0.,1.) - 0.5)*2.
+        action = np.clip(action, -1.,1.)
 
-        next_prod = self.data['prod_mw'][self.current_ts]
-        next_price = self.data['price_mw'][self.current_ts]
+        next_prod = self.data['prod_mw'][self.start_idx + self.current_ts]
+        next_price = self.data['price_mw'][self.start_idx + self.current_ts]
 
         """
         Si action > 0: on charge 
@@ -121,7 +122,13 @@ class SEnv(gym.Env):
 
         """
 
+        penality = 0. 
+        order_stock = 0. 
+        diff_stock = 0. 
+        diff_sell = 0.
+
         if action >= 0.: # LOAD
+            withdrawn_energy = 0.
             order_sell = (1. - action) * next_prod # On a ordre de vendre une partie (1-action) de la prod 
             # order_stock = np.min([action * next_prod, self.max_hourly_stock])
             order_stock = action * next_prod
@@ -141,22 +148,41 @@ class SEnv(gym.Env):
 
             cash_from_sale = next_price * total_sell
             self.stock = np.min([self.stock + order_stock, self.max_stock])
-            # cash_from_sale = (1. - action) * next_price * next_prod 
-            # self.stock= np.min([self.stock + np.min([action * next_prod, self.max_hourly_stock]), self.max_stock])
+            
 
         else: 
             withdrawn_energy = np.min([np.abs(action) * self.max_output * self.max_stock, self.stock])
             total_sell = next_prod + withdrawn_energy * self.efficiency 
             cash_from_sale = next_price * total_sell
+            if self.stock <= 0.1* self.max_stock: 
+                penality = 0.
             self.stock = np.clip(self.stock - withdrawn_energy, 0., self.max_stock)
 
 
         done = True if self.current_ts == self.ep_length else False 
-        r = cash_from_sale
+        r = cash_from_sale - next_prod * next_price# - penality - next_prod * next_price
         # return self.get_obs(), 0.001 * r, done, {'stock': self.stock, 'prod': total_sell}
-        return self.get_obs(), r - next_prod * next_price, done, {'stock': self.stock, 'prod': total_sell}
+        return self.get_obs(), r, done, {'stock': self.stock, 
+                                              'prod': next_prod,
+                                              'price': next_price, 
+                                              'withdrawn_energy': withdrawn_energy, 
+                                              'penality': penality, 
+                                              'cash_from_sale': cash_from_sale, 
+                                              'total_sell': total_sell, 
+                                              'order_stock': order_stock, 
+                                              'diff_sell': diff_sell, 
+                                              'diff_stock': diff_stock}
 
 
+class SEnv2(SEnv): 
+    def __init__(self): 
+        super().__init__()
+        self.action_space = gym.spaces.Discrete(2)
+
+    def step(self, action): 
+        v = np.random.uniform(0.8,1.)
+        action = -v * (1. - action) + v * (action)
+        return super().step(action)
 
 
 if __name__ == "__main__": 

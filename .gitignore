@@ -5,3 +5,5 @@ trained_models/*
 *.zip
 draft_runs/
 olg_runs/
+sesame_runs/
+sesame_trained/

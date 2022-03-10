@@ -11,7 +11,7 @@ np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 
 if __name__ == "__main__":
 
-    env_id = 'Trading-v5'
+    env_id = 'Trading-v6'
 
     model = PPO('MlpPolicy', make_vec_env(env_id, 8), 
             verbose = 1, device = torch.device('cpu'), 
@@ -20,6 +20,6 @@ if __name__ == "__main__":
             tensorboard_log = './sesame_runs')
 
     
-    model.learn(total_timesteps = 1000000) 
+    model.learn(total_timesteps = 300000) 
 
-    model.save('./sesame_trained/sesame_1')
+    model.save('./sesame_trained/sesame_14')

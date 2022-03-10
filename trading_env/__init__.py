@@ -32,6 +32,11 @@ register(
     entry_point='trading_env.envs:SEnv',
 )
 
+register(
+    id='Trading-v6',
+    entry_point='trading_env.envs:SEnv2',
+)
+
 
 
 # register(
